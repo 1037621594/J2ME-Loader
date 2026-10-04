@@ -25,6 +25,7 @@ public class Constants {
 	public static final String KEY_CONFIG_PATH = "configPath";
 	public static final String KEY_MIDLET_NAME = "midletName";
 	public static final String KEY_START_ARGUMENTS = "startArguments";
+	public static final String KEY_MIDLET_CLASS = "midletClass";
 
 	public static final String PREF_APP_SORT = "pref_app_sort";
 	public static final String PREF_DEFAULT_PROFILE = "default_profile";

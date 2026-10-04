@@ -102,6 +102,8 @@ public class MicroActivity extends AppCompatActivity {
 	private InputMethodManager inputMethodManager;
 	private int menuKey;
 	private String appPath;
+	private String startArguments;
+	private String selectedMidletClass;
 
 	public ActivityMicroBinding binding;
 
@@ -146,6 +148,8 @@ public class MicroActivity extends AppCompatActivity {
 			}
 		}
 		String arguments = intent.getStringExtra(KEY_START_ARGUMENTS);
+		startArguments = arguments;
+		selectedMidletClass = intent.getStringExtra(KEY_MIDLET_CLASS);
 		if (arguments != null) {
 			MidletSystem.setProperty("com.nokia.mid.cmdline", arguments);
 			String[] arr = arguments.split(";");
@@ -259,7 +263,11 @@ public class MicroActivity extends AppCompatActivity {
 		if (size == 0) {
 			throw new Exception("No MIDlets found");
 		} else if (size == 1) {
-			MidletThread.create(microLoader, midletsClassArray[0]);
+			String mainClass = selectedMidletClass != null ? selectedMidletClass : midletsClassArray[0];
+			selectedMidletClass = mainClass;
+			MidletThread.create(microLoader, mainClass);
+		} else if (selectedMidletClass != null && midlets.containsKey(selectedMidletClass)) {
+			MidletThread.create(microLoader, selectedMidletClass);
 		} else {
 			showMidletDialog(midletsNameArray, midletsClassArray);
 		}
@@ -279,6 +287,7 @@ public class MicroActivity extends AppCompatActivity {
 					sb.append("Begin app: ").append(names[n]).append(", ").append(clazz);
 					errorReporter.putCustomData(Constants.KEY_APPCENTER_ATTACHMENT, sb.toString());
 					MidletThread.create(microLoader, clazz);
+					selectedMidletClass = clazz;
 					MidletThread.resumeApp();
 				})
 				.setOnCancelListener(d -> {
@@ -421,6 +430,8 @@ public class MicroActivity extends AppCompatActivity {
 	public boolean onCreateOptionsMenu(Menu menu) {
 		MenuInflater inflater = getMenuInflater();
 		inflater.inflate(R.menu.midlet_displayable, menu);
+		MenuItem loadSnapshot = menu.findItem(R.id.action_load_snapshot);
+		loadSnapshot.setVisible(SnapshotManager.exists(appPath));
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
 			menu.findItem(R.id.action_lock_orientation).setVisible(true);
 		}
@@ -458,6 +469,10 @@ public class MicroActivity extends AppCompatActivity {
 		int id = item.getItemId();
 		if (id == R.id.action_exit_midlet) {
 			showExitConfirmation();
+		} else if (id == R.id.action_save_snapshot) {
+			saveSnapshot();
+		} else if (id == R.id.action_load_snapshot) {
+			loadSnapshot();
 		} else if (id == R.id.action_save_log) {
 			saveLog();
 		} else if (id == R.id.action_lock_orientation) {
@@ -634,6 +649,34 @@ public class MicroActivity extends AppCompatActivity {
 				.setNegativeButton(android.R.string.cancel, null)
 				.setNeutralButton(R.string.reset, ((d, which) -> microLoader.setLimitFps(-1)))
 				.show();
+	}
+
+	private SnapshotManager.Metadata snapshotMetadata() {
+		return new SnapshotManager.Metadata(appName, appPath, startArguments, selectedMidletClass);
+	}
+
+	private void saveSnapshot() {
+		MidletThread.saveSnapshot(snapshotMetadata(), error -> {
+			if (error == null) {
+				Toast.makeText(this, R.string.snapshot_saved, Toast.LENGTH_SHORT).show();
+				invalidateOptionsMenu();
+			} else {
+				Toast.makeText(this, R.string.snapshot_failed, Toast.LENGTH_SHORT).show();
+			}
+		});
+	}
+
+	private void loadSnapshot() {
+		try {
+			SnapshotManager.Metadata metadata = SnapshotManager.load(appPath);
+			MidletThread.loadSnapshot(metadata, error -> {
+				if (error != null) {
+					Toast.makeText(this, R.string.snapshot_failed, Toast.LENGTH_SHORT).show();
+				}
+			});
+		} catch (IOException | RuntimeException e) {
+			Toast.makeText(this, R.string.snapshot_failed, Toast.LENGTH_SHORT).show();
+		}
 	}
 
 	private void showGameSpeedDialog() {

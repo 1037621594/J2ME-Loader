@@ -777,6 +777,8 @@ public class ConfigActivity extends BaseActivity implements View.OnClickListener
 		Intent i = new Intent(this, MicroActivity.class);
 		i.setData(getIntent().getData());
 		i.putExtra(KEY_MIDLET_NAME, getIntent().getStringExtra(KEY_MIDLET_NAME));
+		i.putExtra(KEY_START_ARGUMENTS, getIntent().getStringExtra(KEY_START_ARGUMENTS));
+		i.putExtra(KEY_MIDLET_CLASS, getIntent().getStringExtra(KEY_MIDLET_CLASS));
 		startActivity(i);
 		finish();
 	}

@@ -19,6 +19,7 @@ package javax.microedition.shell;
 
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.util.Log;
@@ -42,6 +43,8 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 	private static final int START = 1;
 	private static final int PAUSE = 2;
 	private static final int DESTROY = 3;
+	private static final int SAVE_SNAPSHOT = 4;
+	private static final int LOAD_SNAPSHOT = 5;
 	private static final int UNINITIALIZED = 0;
 	private static final int STARTED = 1;
 	private static final int PAUSED = 2;
@@ -53,6 +56,20 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 	private MIDlet midlet;
 	private final Handler handler;
 	private int state;
+
+	interface SnapshotCallback {
+		void onComplete(Throwable error);
+	}
+
+	private static final class SnapshotRequest {
+		final SnapshotManager.Metadata metadata;
+		final SnapshotCallback callback;
+
+		SnapshotRequest(SnapshotManager.Metadata metadata, SnapshotCallback callback) {
+			this.metadata = metadata;
+			this.callback = callback;
+		}
+	}
 
 	private MidletThread(MicroLoader microLoader, String mainClass) {
 		super("MidletMain");
@@ -77,7 +94,9 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 			activity.finish();
 		}
 		if (startAfterDestroy != null) {
-			Config.startApp(ContextHolder.getActivity(), startAfterDestroy[0], startAfterDestroy[1], false, startAfterDestroy[2]);
+			String mainClass = startAfterDestroy.length > 3 ? startAfterDestroy[3] : null;
+			Config.startApp(ContextHolder.getActivity(), startAfterDestroy[0], startAfterDestroy[1], false,
+					startAfterDestroy[2], mainClass);
 		}
 		Process.killProcess(Process.myPid());
 	}
@@ -89,6 +108,22 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 	static void pauseApp() {
 		if (instance != null)
 			instance.handler.obtainMessage(PAUSE).sendToTarget();
+	}
+
+	static void saveSnapshot(SnapshotManager.Metadata metadata, SnapshotCallback callback) {
+		if (instance == null) {
+			callback.onComplete(new IllegalStateException("MIDlet is not running"));
+			return;
+		}
+		instance.handler.obtainMessage(SAVE_SNAPSHOT, new SnapshotRequest(metadata, callback)).sendToTarget();
+	}
+
+	static void loadSnapshot(SnapshotManager.Metadata metadata, SnapshotCallback callback) {
+		if (instance == null) {
+			callback.onComplete(new IllegalStateException("MIDlet is not running"));
+			return;
+		}
+		instance.handler.obtainMessage(LOAD_SNAPSHOT, new SnapshotRequest(metadata, callback)).sendToTarget();
 	}
 
 	public static void resumeApp() {
@@ -180,7 +215,70 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 				}
 				notifyDestroyed();
 				break;
+			case SAVE_SNAPSHOT:
+				handleSaveSnapshot((SnapshotRequest) msg.obj);
+				break;
+			case LOAD_SNAPSHOT:
+				handleLoadSnapshot((SnapshotRequest) msg.obj);
+				break;
 		}
 		return true;
+	}
+
+	private void handleSaveSnapshot(SnapshotRequest request) {
+		Throwable error = null;
+		boolean restart = state == STARTED;
+		try {
+			if (restart) {
+				midlet.pauseApp();
+				state = PAUSED;
+			}
+			SnapshotManager.save(request.metadata);
+			if (restart) {
+				state = STARTED;
+				midlet.startApp();
+			}
+		} catch (Throwable t) {
+			error = t;
+			Log.e(TAG, "Can't save snapshot", t);
+		}
+		postSnapshotResult(request.callback, error);
+	}
+
+	private void handleLoadSnapshot(SnapshotRequest request) {
+		try {
+			if (state == STARTED) {
+				midlet.pauseApp();
+				state = PAUSED;
+			}
+			try {
+				midlet.destroyApp(true);
+			} catch (MIDletStateChangeException e) {
+				Log.w(TAG, "Midlet refused destruction while loading snapshot", e);
+			}
+			state = DESTROYED;
+			SnapshotManager.restore(request.metadata);
+			startAfterDestroy = new String[] {
+					request.metadata.appName, request.metadata.appPath,
+					request.metadata.arguments, request.metadata.mainClass
+			};
+			postSnapshotResult(request.callback, null);
+			notifyDestroyed();
+		} catch (Throwable t) {
+			Log.e(TAG, "Can't load snapshot", t);
+			if (state == DESTROYED) {
+				try {
+					midlet.startApp();
+					state = STARTED;
+				} catch (Throwable restartError) {
+					Log.e(TAG, "Can't resume MIDlet after snapshot load failure", restartError);
+				}
+			}
+			postSnapshotResult(request.callback, t);
+		}
+	}
+
+	private static void postSnapshotResult(SnapshotCallback callback, Throwable error) {
+		new Handler(Looper.getMainLooper()).post(() -> callback.onComplete(error));
 	}
 }
