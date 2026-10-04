@@ -1,0 +1,52 @@
+name: Build Debug APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build dependencies
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;22.1.7171670"
+
+      - name: Create debug signing placeholder
+        run: |
+          printf '%s\n' \
+            'keyAlias=androiddebugkey' \
+            'keyPassword=android' \
+            'storeFile=debug.keystore' \
+            'storePassword=android' > keystore.properties
+
+      - name: Build DevDebug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDevDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: J2ME-Loader-dev-debug
+          path: app/build/outputs/apk/dev/debug/*.apk
+          if-no-files-found: error

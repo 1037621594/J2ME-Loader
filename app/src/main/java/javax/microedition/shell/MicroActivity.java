@@ -441,6 +441,7 @@ public class MicroActivity extends AppCompatActivity {
 	public boolean onPrepareOptionsMenu(Menu menu) {
 		if (current instanceof Canvas) {
 			menu.setGroupVisible(R.id.action_group_canvas, true);
+			menu.findItem(R.id.action_turbo_mode).setChecked(microLoader.isTurboMode());
 			VirtualKeyboard vk = ContextHolder.getVk();
 			if (vk != null) {
 				boolean visible = vk.getLayoutEditMode() != VirtualKeyboard.LAYOUT_EOF;
@@ -476,6 +477,11 @@ public class MicroActivity extends AppCompatActivity {
 			takeScreenshot();
 		} else if (id == R.id.action_limit_fps) {
 			showLimitFpsDialog();
+		} else if (id == R.id.action_turbo_mode) {
+			microLoader.setTurboMode(!microLoader.isTurboMode());
+			item.setChecked(microLoader.isTurboMode());
+		} else if (id == R.id.action_game_speed) {
+			showGameSpeedDialog();
 		} else if (ContextHolder.getVk() != null) {
 			// Handled only when virtual keyboard is enabled
 			handleVkOptions(id);
@@ -627,6 +633,25 @@ public class MicroActivity extends AppCompatActivity {
 				})
 				.setNegativeButton(android.R.string.cancel, null)
 				.setNeutralButton(R.string.reset, ((d, which) -> microLoader.setLimitFps(-1)))
+				.show();
+	}
+
+	private void showGameSpeedDialog() {
+		final float[] multipliers = {1f, 1.5f, 2f, 3f};
+		float currentMultiplier = microLoader.getSpeedMultiplier();
+		int checked = 0;
+		for (int i = 0; i < multipliers.length; i++) {
+			if (multipliers[i] == currentMultiplier) {
+				checked = i;
+				break;
+			}
+		}
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.game_speed)
+				.setSingleChoiceItems(R.array.game_speed_values, checked, (dialog, which) -> {
+					microLoader.setSpeedMultiplier(multipliers[which]);
+					dialog.dismiss();
+				})
 				.show();
 	}
 

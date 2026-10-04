@@ -65,7 +65,14 @@ public class AndroidMethodVisitor extends MethodVisitor {
 			case "java/lang/Thread":
 				if (name.equals("yield")) {
 					mv.visitLdcInsn(1L);
-					mv.visitMethodInsn(opcode, owner, "sleep", "(J)V", false);
+					mv.visitMethodInsn(INVOKESTATIC, "javax/microedition/shell/TimeScale",
+							"sleep", "(J)V", false);
+					return;
+				}
+				if (opcode == INVOKESTATIC && name.equals("sleep") &&
+						(desc.equals("(J)V") || desc.equals("(JI)V"))) {
+					mv.visitMethodInsn(INVOKESTATIC, "javax/microedition/shell/TimeScale",
+							name, desc, false);
 					return;
 				}
 				break;
@@ -122,6 +129,11 @@ public class AndroidMethodVisitor extends MethodVisitor {
 			case "java/lang/System":
 				if (opcode == INVOKESTATIC && name.equals("getProperty")) {
 					mv.visitMethodInsn(opcode, "javax/microedition/shell/MidletSystem", name, desc, itf);
+					return;
+				}
+				if (opcode == INVOKESTATIC &&
+						((name.equals("currentTimeMillis") || name.equals("nanoTime")) && desc.equals("()J"))) {
+					mv.visitMethodInsn(INVOKESTATIC, "javax/microedition/shell/TimeScale", name, desc, false);
 					return;
 				}
 				break;

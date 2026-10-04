@@ -95,6 +95,7 @@ public class MicroLoader {
 	}
 
 	public boolean init() {
+		TimeScale.reset();
 		File config = new File(workDir + Config.MIDLET_CONFIGS_DIR + appDirName);
 		this.params = ProfilesManager.loadConfig(config);
 		if (params == null) {
@@ -234,6 +235,22 @@ public class MicroLoader {
 		else Canvas.setLimitFps(fps);
 	}
 
+	void setTurboMode(boolean enabled) {
+		Canvas.setTurboMode(enabled);
+	}
+
+	boolean isTurboMode() {
+		return Canvas.isTurboMode();
+	}
+
+	void setSpeedMultiplier(float multiplier) {
+		TimeScale.setMultiplier(multiplier);
+	}
+
+	float getSpeedMultiplier() {
+		return TimeScale.getMultiplier();
+	}
+
 	void applyConfiguration() {
 		try {
 			// Apply configuration to the launching MIDlet
@@ -275,6 +292,7 @@ public class MicroLoader {
 			Canvas.setForceFullscreen(params.forceFullscreen);
 			Canvas.setShowFps(params.showFps);
 			Canvas.setLimitFps(params.fpsLimit);
+			Canvas.setTurboMode(false);
 
 			Font.applySettings(params);
 

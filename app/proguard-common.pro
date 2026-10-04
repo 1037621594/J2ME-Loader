@@ -44,3 +44,6 @@
 -keep class * implements com.google.gson.JsonDeserializer {
   <init>();
 }
+
+# Referenced from MIDlet bytecode while JAR files are converted to DEX.
+-keep class javax.microedition.shell.TimeScale { *; }

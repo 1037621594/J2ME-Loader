@@ -130,6 +130,7 @@ public abstract class Canvas extends Displayable {
 	private static int backgroundColor;
 	private static int scaleRatio;
 	private static int fpsLimit;
+	private static volatile boolean turboMode;
 	private static boolean screenshotRawMode;
 	private static int scaleType;
 	private static int screenGravity;
@@ -222,6 +223,14 @@ public abstract class Canvas extends Displayable {
 			fpsLimit = 1000;
 		}
 		Canvas.fpsLimit = fpsLimit;
+	}
+
+	public static void setTurboMode(boolean enabled) {
+		turboMode = enabled;
+	}
+
+	public static boolean isTurboMode() {
+		return turboMode;
 	}
 
 	public static void setScreenshotRawMode(boolean enable) {
@@ -650,7 +659,7 @@ public abstract class Canvas extends Displayable {
 	}
 
 	private void limitFps() {
-		if (fpsLimit <= 0) return;
+		if (turboMode || fpsLimit <= 0) return;
 		try {
 			long millis = (1000 / fpsLimit) - (System.currentTimeMillis() - lastFrameTime);
 			if (millis > 0) Thread.sleep(millis);

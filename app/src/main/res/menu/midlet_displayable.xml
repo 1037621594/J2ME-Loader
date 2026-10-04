@@ -26,6 +26,15 @@
             android:title="@string/PREF_LIMIT_FPS" />
 
         <item
+            android:id="@+id/action_turbo_mode"
+            android:title="@string/turbo_mode"
+            android:checkable="true" />
+
+        <item
+            android:id="@+id/action_game_speed"
+            android:title="@string/game_speed" />
+
+        <item
             android:id="@+id/action_submenu_vk"
             android:title="@string/PREF_VIRTUAL_KEYBOARD_OPTIONS">
             <menu>
