@@ -680,7 +680,7 @@ public class MicroActivity extends AppCompatActivity {
 	}
 
 	private void showGameSpeedDialog() {
-		final float[] multipliers = {1f, 1.5f, 2f, 3f};
+		final float[] multipliers = {1f, 1.25f, 1.5f, 1.75f, 2f, 3f};
 		float currentMultiplier = microLoader.getSpeedMultiplier();
 		int checked = 0;
 		for (int i = 0; i < multipliers.length; i++) {
