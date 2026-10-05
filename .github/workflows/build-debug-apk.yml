@@ -32,13 +32,13 @@ jobs:
             build-tools;34.0.0
             ndk;22.1.7171670
 
-      - name: Create debug signing placeholder
+      - name: Configure signing properties
         run: |
           printf '%s\n' \
-            'keyAlias=androiddebugkey' \
-            'keyPassword=android' \
-            'storeFile=debug.keystore' \
-            'storePassword=android' > keystore.properties
+            'keyAlias=j2me-ci' \
+            'keyPassword=J2ME-Loader-CI-2026' \
+            'storeFile=../ci-debug.keystore' \
+            'storePassword=J2ME-Loader-CI-2026' > keystore.properties
 
       - name: Build DevDebug APK
         run: |

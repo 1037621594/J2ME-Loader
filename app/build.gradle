@@ -21,6 +21,14 @@ android {
     }
 
     signingConfigs {
+        // Stable test key used by CI debug builds so APKs can be installed over
+        // the previous GitHub Actions build on the same device.
+        ci {
+            keyAlias 'j2me-ci'
+            keyPassword 'J2ME-Loader-CI-2026'
+            storeFile rootProject.file('ci-debug.keystore')
+            storePassword 'J2ME-Loader-CI-2026'
+        }
         release {
             if (System.getenv()['BITRISE_IO']) {
                 keyAlias System.getenv('BITRISEIO_ANDROID_KEYSTORE_ALIAS')
@@ -46,6 +54,7 @@ android {
         }
         debug {
             applicationIdSuffix '.debug'
+            signingConfig signingConfigs.ci
             jniDebuggable true
             multiDexEnabled true
             multiDexKeepProguard file('multidex-config.pro')

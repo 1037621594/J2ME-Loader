@@ -25,7 +25,9 @@ import android.os.Process;
 import android.util.Log;
 
 import javax.microedition.lcdui.Canvas;
+import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Displayable;
+import javax.microedition.m3g.Graphics3D;
 import javax.microedition.midlet.MIDlet;
 import javax.microedition.midlet.MIDletStateChangeException;
 import javax.microedition.util.ContextHolder;
@@ -130,22 +132,30 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 		instance.handler.obtainMessage(LOAD_SNAPSHOT, new SnapshotRequest(metadata, callback)).sendToTarget();
 	}
 
-	private static void restartFromSnapshot(SnapshotManager.Metadata metadata) {
+	private static void reloadFromSnapshot(SnapshotManager.Metadata metadata) {
 		final MicroActivity activity = ContextHolder.getActivity();
 		if (activity == null) {
+			suppressDestroyExit = false;
 			return;
 		}
 		MidletThread oldInstance = instance;
+		final MicroLoader loader = oldInstance == null ? null : oldInstance.microLoader;
 		instance = null;
-		if (oldInstance != null) {
-			oldInstance.handler.removeCallbacksAndMessages(null);
-			oldInstance.quitSafely();
-		}
 		activity.runOnUiThread(() -> {
+			if (oldInstance != null) {
+				oldInstance.handler.removeCallbacksAndMessages(null);
+				oldInstance.quitSafely();
+			}
+			if (loader == null) {
+				suppressDestroyExit = false;
+				return;
+			}
+			Display.initDisplay();
+			Graphics3D.initGraphics3D();
 			startAfterDestroy = null;
-			Config.startApp(activity, metadata.appName, metadata.appPath, false,
-					metadata.arguments, metadata.mainClass);
-			activity.finish();
+			instance = new MidletThread(loader, metadata.mainClass);
+			suppressDestroyExit = false;
+			instance.handler.obtainMessage(START).sendToTarget();
 		});
 	}
 
@@ -283,8 +293,7 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 			state = DESTROYED;
 			SnapshotManager.restore(request.metadata);
 			postSnapshotResult(request.callback, null);
-			suppressDestroyExit = false;
-			restartFromSnapshot(request.metadata);
+			reloadFromSnapshot(request.metadata);
 		} catch (Throwable t) {
 			suppressDestroyExit = false;
 			Log.e(TAG, "Can't load snapshot", t);
