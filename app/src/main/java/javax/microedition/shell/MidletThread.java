@@ -51,6 +51,7 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 	private static final int DESTROYED = 3;
 	public static String[] startAfterDestroy;
 	private static MidletThread instance;
+	private static volatile boolean suppressDestroyExit;
 	private final MicroLoader microLoader;
 	private final String mainClass;
 	private MIDlet midlet;
@@ -89,6 +90,9 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 		if (instance != null) {
 			instance.state = DESTROYED;
 		}
+		if (suppressDestroyExit) {
+			return;
+		}
 		MicroActivity activity = ContextHolder.getActivity();
 		if (activity != null) {
 			activity.finish();
@@ -124,6 +128,25 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 			return;
 		}
 		instance.handler.obtainMessage(LOAD_SNAPSHOT, new SnapshotRequest(metadata, callback)).sendToTarget();
+	}
+
+	private static void restartFromSnapshot(SnapshotManager.Metadata metadata) {
+		final MicroActivity activity = ContextHolder.getActivity();
+		if (activity == null) {
+			return;
+		}
+		MidletThread oldInstance = instance;
+		instance = null;
+		if (oldInstance != null) {
+			oldInstance.handler.removeCallbacksAndMessages(null);
+			oldInstance.quitSafely();
+		}
+		activity.runOnUiThread(() -> {
+			startAfterDestroy = null;
+			Config.startApp(activity, metadata.appName, metadata.appPath, false,
+					metadata.arguments, metadata.mainClass);
+			activity.finish();
+		});
 	}
 
 	public static void resumeApp() {
@@ -246,6 +269,7 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 	}
 
 	private void handleLoadSnapshot(SnapshotRequest request) {
+		suppressDestroyExit = true;
 		try {
 			if (state == STARTED) {
 				midlet.pauseApp();
@@ -258,13 +282,11 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 			}
 			state = DESTROYED;
 			SnapshotManager.restore(request.metadata);
-			startAfterDestroy = new String[] {
-					request.metadata.appName, request.metadata.appPath,
-					request.metadata.arguments, request.metadata.mainClass
-			};
 			postSnapshotResult(request.callback, null);
-			notifyDestroyed();
+			suppressDestroyExit = false;
+			restartFromSnapshot(request.metadata);
 		} catch (Throwable t) {
+			suppressDestroyExit = false;
 			Log.e(TAG, "Can't load snapshot", t);
 			if (state == DESTROYED) {
 				try {
