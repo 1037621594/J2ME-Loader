@@ -25,15 +25,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
-            "ndk;22.1.7171670"
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-34
+            build-tools;34.0.0
+            ndk;22.1.7171670
 
       - name: Create debug signing placeholder
         run: |
