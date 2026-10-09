@@ -32,6 +32,14 @@
         android:title="@string/help"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_export_all"
+        android:title="@string/export_all"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_import_all"
+        android:title="@string/import_all"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_save_log"
         android:title="@string/save_log"
         app:showAsAction="never" />

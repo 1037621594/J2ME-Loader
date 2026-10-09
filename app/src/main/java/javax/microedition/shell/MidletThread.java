@@ -24,16 +24,19 @@ import android.os.Message;
 import android.os.Process;
 import android.util.Log;
 
+import java.io.File;
+
 import javax.microedition.lcdui.Canvas;
-import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Displayable;
-import javax.microedition.m3g.Graphics3D;
 import javax.microedition.midlet.MIDlet;
 import javax.microedition.midlet.MIDletStateChangeException;
 import javax.microedition.util.ContextHolder;
 
 import androidx.annotation.NonNull;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import ru.playsoftware.j2meloader.backup.BackupManager;
 import ru.playsoftware.j2meloader.config.Config;
 
 public class MidletThread extends HandlerThread implements Handler.Callback {
@@ -45,33 +48,29 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 	private static final int START = 1;
 	private static final int PAUSE = 2;
 	private static final int DESTROY = 3;
-	private static final int SAVE_SNAPSHOT = 4;
-	private static final int LOAD_SNAPSHOT = 5;
+	private static final int RESTORE_BACKUP = 4;
 	private static final int UNINITIALIZED = 0;
 	private static final int STARTED = 1;
 	private static final int PAUSED = 2;
 	private static final int DESTROYED = 3;
 	public static String[] startAfterDestroy;
 	private static MidletThread instance;
-	private static volatile boolean suppressDestroyExit;
 	private final MicroLoader microLoader;
 	private final String mainClass;
 	private MIDlet midlet;
 	private final Handler handler;
 	private int state;
 
-	interface SnapshotCallback {
-		void onComplete(Throwable error);
+	interface RestoreCallback {
+		void onFailed(Throwable error);
 	}
 
-	private static final class SnapshotRequest {
-		final SnapshotManager.Metadata metadata;
-		final SnapshotCallback callback;
-
-		SnapshotRequest(SnapshotManager.Metadata metadata, SnapshotCallback callback) {
-			this.metadata = metadata;
-			this.callback = callback;
-		}
+	@Data
+	@AllArgsConstructor
+	private static final class RestoreRequest {
+		private final File appDir;
+		private final String[] restartArgs;
+		private final RestoreCallback callback;
 	}
 
 	private MidletThread(MicroLoader microLoader, String mainClass) {
@@ -91,9 +90,6 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 		Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler);
 		if (instance != null) {
 			instance.state = DESTROYED;
-		}
-		if (suppressDestroyExit) {
-			return;
 		}
 		MicroActivity activity = ContextHolder.getActivity();
 		if (activity != null) {
@@ -116,47 +112,18 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 			instance.handler.obtainMessage(PAUSE).sendToTarget();
 	}
 
-	static void saveSnapshot(SnapshotManager.Metadata metadata, SnapshotCallback callback) {
+	/**
+	 * Restores the backup while the MIDlet is stopped, then restarts the whole process.
+	 * RecordStore keeps static in-memory caches, so a restart is the only way to make
+	 * the game read the restored files.
+	 */
+	static void restoreBackup(File appDir, String[] restartArgs, RestoreCallback callback) {
 		if (instance == null) {
-			callback.onComplete(new IllegalStateException("MIDlet is not running"));
+			callback.onFailed(new IllegalStateException("MIDlet is not running"));
 			return;
 		}
-		instance.handler.obtainMessage(SAVE_SNAPSHOT, new SnapshotRequest(metadata, callback)).sendToTarget();
-	}
-
-	static void loadSnapshot(SnapshotManager.Metadata metadata, SnapshotCallback callback) {
-		if (instance == null) {
-			callback.onComplete(new IllegalStateException("MIDlet is not running"));
-			return;
-		}
-		instance.handler.obtainMessage(LOAD_SNAPSHOT, new SnapshotRequest(metadata, callback)).sendToTarget();
-	}
-
-	private static void reloadFromSnapshot(SnapshotManager.Metadata metadata) {
-		final MicroActivity activity = ContextHolder.getActivity();
-		if (activity == null) {
-			suppressDestroyExit = false;
-			return;
-		}
-		MidletThread oldInstance = instance;
-		final MicroLoader loader = oldInstance == null ? null : oldInstance.microLoader;
-		instance = null;
-		activity.runOnUiThread(() -> {
-			if (oldInstance != null) {
-				oldInstance.handler.removeCallbacksAndMessages(null);
-				oldInstance.quitSafely();
-			}
-			if (loader == null) {
-				suppressDestroyExit = false;
-				return;
-			}
-			Display.initDisplay();
-			Graphics3D.initGraphics3D();
-			startAfterDestroy = null;
-			instance = new MidletThread(loader, metadata.mainClass);
-			suppressDestroyExit = false;
-			instance.handler.obtainMessage(START).sendToTarget();
-		});
+		instance.handler.obtainMessage(RESTORE_BACKUP, new RestoreRequest(appDir, restartArgs, callback))
+				.sendToTarget();
 	}
 
 	public static void resumeApp() {
@@ -248,38 +215,15 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 				}
 				notifyDestroyed();
 				break;
-			case SAVE_SNAPSHOT:
-				handleSaveSnapshot((SnapshotRequest) msg.obj);
-				break;
-			case LOAD_SNAPSHOT:
-				handleLoadSnapshot((SnapshotRequest) msg.obj);
+			case RESTORE_BACKUP:
+				handleRestoreBackup((RestoreRequest) msg.obj);
 				break;
 		}
 		return true;
 	}
 
-	private void handleSaveSnapshot(SnapshotRequest request) {
-		Throwable error = null;
-		boolean restart = state == STARTED;
-		try {
-			if (restart) {
-				midlet.pauseApp();
-				state = PAUSED;
-			}
-			SnapshotManager.save(request.metadata);
-			if (restart) {
-				state = STARTED;
-				midlet.startApp();
-			}
-		} catch (Throwable t) {
-			error = t;
-			Log.e(TAG, "Can't save snapshot", t);
-		}
-		postSnapshotResult(request.callback, error);
-	}
-
-	private void handleLoadSnapshot(SnapshotRequest request) {
-		suppressDestroyExit = true;
+	private void handleRestoreBackup(RestoreRequest request) {
+		Log.i(TAG, "restore backup requested, state=" + state);
 		try {
 			if (state == STARTED) {
 				midlet.pauseApp();
@@ -288,28 +232,25 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 			try {
 				midlet.destroyApp(true);
 			} catch (MIDletStateChangeException e) {
-				Log.w(TAG, "Midlet refused destruction while loading snapshot", e);
+				Log.w(TAG, "Midlet refused destruction while restoring backup", e);
 			}
 			state = DESTROYED;
-			SnapshotManager.restore(request.metadata);
-			postSnapshotResult(request.callback, null);
-			reloadFromSnapshot(request.metadata);
+			BackupManager.restoreApp(request.getAppDir());
+			startAfterDestroy = request.getRestartArgs();
+			Log.i(TAG, "backup restored, restarting process");
+			notifyDestroyed();
 		} catch (Throwable t) {
-			suppressDestroyExit = false;
-			Log.e(TAG, "Can't load snapshot", t);
+			Log.e(TAG, "Can't restore backup", t);
 			if (state == DESTROYED) {
 				try {
-					midlet.startApp();
 					state = STARTED;
+					midlet.startApp();
 				} catch (Throwable restartError) {
-					Log.e(TAG, "Can't resume MIDlet after snapshot load failure", restartError);
+					state = DESTROYED;
+					Log.e(TAG, "Can't resume MIDlet after restore failure", restartError);
 				}
 			}
-			postSnapshotResult(request.callback, t);
+			new Handler(Looper.getMainLooper()).post(() -> request.getCallback().onFailed(t));
 		}
-	}
-
-	private static void postSnapshotResult(SnapshotCallback callback, Throwable error) {
-		new Handler(Looper.getMainLooper()).post(() -> callback.onComplete(error));
 	}
 }

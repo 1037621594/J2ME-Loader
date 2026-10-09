@@ -65,7 +65,7 @@ public class AppUtils {
 		return apps;
 	}
 
-	private static AppItem getApp(File appDir) throws IOException {
+	public static AppItem getApp(File appDir) throws IOException {
 		File mf = new File(appDir, Config.MIDLET_MANIFEST_FILE);
 		Descriptor params = new Descriptor(mf, false);
 		AppItem item = new AppItem(appDir.getName(), params.getName(),

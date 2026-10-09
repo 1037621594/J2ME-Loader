@@ -76,9 +76,13 @@ import java.util.concurrent.TimeUnit;
 
 import io.reactivex.Observable;
 import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.Single;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.schedulers.Schedulers;
 import ru.playsoftware.j2meloader.R;
+import ru.playsoftware.j2meloader.backup.BackupManager;
+import ru.playsoftware.j2meloader.backup.StoragePermission;
 import ru.playsoftware.j2meloader.appsdb.AppRepository;
 import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.config.ConfigActivity;
@@ -357,10 +361,77 @@ public class AppsListFragment extends ListFragment {
 				e.printStackTrace();
 				Toast.makeText(activity, R.string.error, Toast.LENGTH_SHORT).show();
 			}
+		} else if (itemId == R.id.action_export_all) {
+			startBackupTask(false);
+		} else if (itemId == R.id.action_import_all) {
+			startBackupTask(true);
 		} else if (itemId == R.id.action_exit_app) {
 			activity.finish();
 		} else if (itemId == R.id.action_sort) {
 			showSortDialog();
+		}
+		return false;
+	}
+
+	private void startBackupTask(boolean isImport) {
+		FragmentActivity activity = requireActivity();
+		if (!StoragePermission.hasAccess(activity)) {
+			Toast.makeText(activity, R.string.backup_need_permission, Toast.LENGTH_LONG).show();
+			StoragePermission.request(activity);
+			return;
+		}
+		if (isMidletProcessRunning(activity)) {
+			Toast.makeText(activity, R.string.backup_midlet_running, Toast.LENGTH_LONG).show();
+			return;
+		}
+		if (isImport) {
+			new AlertDialog.Builder(activity)
+					.setTitle(R.string.import_all)
+					.setMessage(R.string.import_confirm)
+					.setNegativeButton(android.R.string.cancel, null)
+					.setPositiveButton(android.R.string.ok, (d, w) -> runBackupTask(true))
+					.show();
+		} else {
+			runBackupTask(false);
+		}
+	}
+
+	private void runBackupTask(boolean isImport) {
+		FragmentActivity activity = requireActivity();
+		AlertDialog progress = new AlertDialog.Builder(activity)
+				.setMessage(R.string.backup_in_progress)
+				.setCancelable(false)
+				.show();
+		Single.fromCallable(() -> isImport ? BackupManager.importAll(appRepository) : BackupManager.exportAll())
+				.subscribeOn(Schedulers.io())
+				.observeOn(AndroidSchedulers.mainThread())
+				.subscribe(summary -> {
+					progress.dismiss();
+					String message = isImport
+							? getString(R.string.import_result, summary.getSuccess(), summary.getSkipped(), summary.getFailed())
+							: getString(R.string.export_result, summary.getSuccess(), summary.getFailed());
+					new AlertDialog.Builder(activity)
+							.setMessage(message)
+							.setPositiveButton(android.R.string.ok, null)
+							.show();
+				}, error -> {
+					progress.dismiss();
+					Log.e(TAG, "Backup task failed", error);
+					Toast.makeText(activity, R.string.backup_failed, Toast.LENGTH_LONG).show();
+				});
+	}
+
+	private static boolean isMidletProcessRunning(Context context) {
+		ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+		List<ActivityManager.RunningAppProcessInfo> processes = am.getRunningAppProcesses();
+		if (processes == null) {
+			return false;
+		}
+		String midletProcess = context.getPackageName() + ":midlet";
+		for (ActivityManager.RunningAppProcessInfo info : processes) {
+			if (midletProcess.equals(info.processName)) {
+				return true;
+			}
 		}
 		return false;
 	}

@@ -36,6 +36,7 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.method.DigitsKeyListener;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -82,12 +83,15 @@ import io.reactivex.SingleObserver;
 import io.reactivex.disposables.Disposable;
 import ru.playsoftware.j2meloader.BuildConfig;
 import ru.playsoftware.j2meloader.R;
+import ru.playsoftware.j2meloader.backup.BackupManager;
+import ru.playsoftware.j2meloader.backup.StoragePermission;
 import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.databinding.ActivityMicroBinding;
 import ru.playsoftware.j2meloader.util.Constants;
 import ru.playsoftware.j2meloader.util.LogUtils;
 
 public class MicroActivity extends AppCompatActivity {
+	private static final String TAG = MicroActivity.class.getSimpleName();
 	private static final int ORIENTATION_DEFAULT = 0;
 	private static final int ORIENTATION_AUTO = 1;
 	private static final int ORIENTATION_PORTRAIT = 2;
@@ -430,8 +434,6 @@ public class MicroActivity extends AppCompatActivity {
 	public boolean onCreateOptionsMenu(Menu menu) {
 		MenuInflater inflater = getMenuInflater();
 		inflater.inflate(R.menu.midlet_displayable, menu);
-		MenuItem loadSnapshot = menu.findItem(R.id.action_load_snapshot);
-		loadSnapshot.setVisible(SnapshotManager.exists(appPath));
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
 			menu.findItem(R.id.action_lock_orientation).setVisible(true);
 		}
@@ -469,10 +471,10 @@ public class MicroActivity extends AppCompatActivity {
 		int id = item.getItemId();
 		if (id == R.id.action_exit_midlet) {
 			showExitConfirmation();
-		} else if (id == R.id.action_save_snapshot) {
-			saveSnapshot();
-		} else if (id == R.id.action_load_snapshot) {
-			loadSnapshot();
+		} else if (id == R.id.action_backup_save) {
+			backupSave();
+		} else if (id == R.id.action_restore_save) {
+			restoreSave();
 		} else if (id == R.id.action_save_log) {
 			saveLog();
 		} else if (id == R.id.action_lock_orientation) {
@@ -651,32 +653,45 @@ public class MicroActivity extends AppCompatActivity {
 				.show();
 	}
 
-	private SnapshotManager.Metadata snapshotMetadata() {
-		return new SnapshotManager.Metadata(appName, appPath, startArguments, selectedMidletClass);
-	}
-
-	private void saveSnapshot() {
-		MidletThread.saveSnapshot(snapshotMetadata(), error -> {
-			if (error == null) {
-				Toast.makeText(this, R.string.snapshot_saved, Toast.LENGTH_SHORT).show();
-				invalidateOptionsMenu();
-			} else {
-				Toast.makeText(this, R.string.snapshot_failed, Toast.LENGTH_SHORT).show();
-			}
-		});
-	}
-
-	private void loadSnapshot() {
-		try {
-			SnapshotManager.Metadata metadata = SnapshotManager.load(appPath);
-			MidletThread.loadSnapshot(metadata, error -> {
-				if (error != null) {
-					Toast.makeText(this, R.string.snapshot_failed, Toast.LENGTH_SHORT).show();
-				}
-			});
-		} catch (IOException | RuntimeException e) {
-			Toast.makeText(this, R.string.snapshot_failed, Toast.LENGTH_SHORT).show();
+	private void backupSave() {
+		if (!StoragePermission.hasAccess(this)) {
+			Toast.makeText(this, R.string.backup_need_permission, Toast.LENGTH_LONG).show();
+			StoragePermission.request(this);
+			return;
 		}
+		final File appDir = new File(appPath);
+		new Thread(() -> {
+			try {
+				BackupManager.backupApp(appDir, false);
+				runOnUiThread(() -> Toast.makeText(this, R.string.backup_done, Toast.LENGTH_SHORT).show());
+			} catch (Exception e) {
+				Log.e(TAG, "Backup failed", e);
+				runOnUiThread(() -> Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_LONG).show());
+			}
+		}, "BackupSave").start();
+	}
+
+	private void restoreSave() {
+		if (!StoragePermission.hasAccess(this)) {
+			Toast.makeText(this, R.string.backup_need_permission, Toast.LENGTH_LONG).show();
+			StoragePermission.request(this);
+			return;
+		}
+		final File appDir = new File(appPath);
+		if (!BackupManager.backupExists(appDir)) {
+			Toast.makeText(this, R.string.backup_not_found, Toast.LENGTH_LONG).show();
+			return;
+		}
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.restore_save)
+				.setMessage(R.string.restore_save_confirm)
+				.setNegativeButton(android.R.string.cancel, null)
+				.setPositiveButton(android.R.string.ok, (d, w) -> {
+					String[] restartArgs = {appName, appPath, startArguments, selectedMidletClass};
+					MidletThread.restoreBackup(appDir, restartArgs, error ->
+							Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_LONG).show());
+				})
+				.show();
 	}
 
 	private void showGameSpeedDialog() {

@@ -6,11 +6,11 @@
         android:id="@+id/action_save_log"
         android:title="@string/save_log" />
     <item
-        android:id="@+id/action_save_snapshot"
-        android:title="@string/save_snapshot" />
+        android:id="@+id/action_backup_save"
+        android:title="@string/backup_save" />
     <item
-        android:id="@+id/action_load_snapshot"
-        android:title="@string/load_snapshot" />
+        android:id="@+id/action_restore_save"
+        android:title="@string/restore_save" />
     <item
         android:id="@+id/action_lock_orientation"
         android:title="@string/action_lock_orientation"

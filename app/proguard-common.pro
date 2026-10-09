@@ -45,5 +45,8 @@
   <init>();
 }
 
+# Serialized to meta.json with Gson, field names must stay stable across builds
+-keep class ru.playsoftware.j2meloader.backup.BackupMeta { *; }
+
 # Referenced from MIDlet bytecode while JAR files are converted to DEX.
 -keep class javax.microedition.shell.TimeScale { *; }
