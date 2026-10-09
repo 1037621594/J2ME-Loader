@@ -87,6 +87,7 @@ import ru.playsoftware.j2meloader.backup.BackupManager;
 import ru.playsoftware.j2meloader.backup.StoragePermission;
 import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.databinding.ActivityMicroBinding;
+import ru.playsoftware.j2meloader.memsearch.MemorySearchPanel;
 import ru.playsoftware.j2meloader.util.Constants;
 import ru.playsoftware.j2meloader.util.LogUtils;
 
@@ -108,6 +109,7 @@ public class MicroActivity extends AppCompatActivity {
 	private String appPath;
 	private String startArguments;
 	private String selectedMidletClass;
+	private MemorySearchPanel memorySearchPanel;
 
 	public ActivityMicroBinding binding;
 
@@ -437,6 +439,7 @@ public class MicroActivity extends AppCompatActivity {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
 			menu.findItem(R.id.action_lock_orientation).setVisible(true);
 		}
+		menu.findItem(R.id.action_memory_search).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 		if (actionBarEnabled) {
 			menu.findItem(R.id.action_ime_keyboard).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 			menu.findItem(R.id.action_take_screenshot).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
@@ -471,6 +474,11 @@ public class MicroActivity extends AppCompatActivity {
 		int id = item.getItemId();
 		if (id == R.id.action_exit_midlet) {
 			showExitConfirmation();
+		} else if (id == R.id.action_memory_search) {
+			if (memorySearchPanel == null) {
+				memorySearchPanel = new MemorySearchPanel(this, binding.midletFrame);
+			}
+			memorySearchPanel.toggle();
 		} else if (id == R.id.action_backup_save) {
 			backupSave();
 		} else if (id == R.id.action_restore_save) {
@@ -785,6 +793,9 @@ public class MicroActivity extends AppCompatActivity {
 
 	@Override
 	protected void onDestroy() {
+		if (memorySearchPanel != null) {
+			memorySearchPanel.destroy();
+		}
 		binding = null;
 		super.onDestroy();
 	}

@@ -42,11 +42,13 @@ public class AppClassLoader extends DexClassLoader {
 	private static ZipFile zipFile;
 	private static String dataDir;
 	private static File oldResDir;
+	private static String dexPath;
 
 	AppClassLoader(String paths, String tmpDir, ClassLoader parent, File appDir) {
 		super(paths, tmpDir, null, parent);
 		if (appDir == null)
 			throw new NullPointerException("App path is null");
+		dexPath = paths;
 		oldResDir = new File(appDir, Config.MIDLET_RES_DIR);
 		instance = this;
 		setDataDir(appDir);
@@ -158,6 +160,14 @@ public class AppClassLoader extends DexClassLoader {
 			}
 		}
 		return null;
+	}
+
+	public Class<?> findLoaded(String name) {
+		return findLoadedClass(name);
+	}
+
+	public static String getDexPath() {
+		return dexPath;
 	}
 
 	public static AppClassLoader getInstance() {

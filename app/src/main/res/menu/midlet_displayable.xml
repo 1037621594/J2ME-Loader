@@ -1,5 +1,9 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
+        android:icon="@drawable/ic_action_search"
+        android:id="@+id/action_memory_search"
+        android:title="@string/memory_search" />
+    <item
         android:id="@+id/action_exit_midlet"
         android:title="@string/exit" />
     <item

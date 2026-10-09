@@ -228,4 +228,36 @@
     <string name="default_label">"%s (默认)"</string>
     <string name="not_saved_exists">已存在</string>
     <string name="alert_rewrite_profile">名为“%1$s”的配置文件已存在。\n你想覆盖它吗？</string>
+    <string name="memory_search">内存搜索</string>
+    <string name="memory_search_title">内存搜索</string>
+    <string name="memory_search_minimize">最小化</string>
+    <string name="memory_search_value">数值</string>
+    <string name="memory_search_value_max">最大值</string>
+    <string name="memory_search_first">首次搜索</string>
+    <string name="memory_search_next">再次搜索</string>
+    <string name="memory_search_reset">重置</string>
+    <string name="memory_search_unlock_all">全部解锁</string>
+    <string name="memory_search_scanning">搜索中…</string>
+    <string name="memory_search_status">结果：%1$d，已锁定：%2$d</string>
+    <string name="memory_search_truncated">（结果过多已截断，请缩小范围）</string>
+    <string name="memory_search_need_first">首次搜索需要指定数值条件</string>
+    <string name="memory_search_need_results">请先进行首次搜索</string>
+    <string name="memory_search_mode_not_supported">该模式仅支持数值类型</string>
+    <string name="memory_search_invalid_value">数值无效</string>
+    <string name="memory_search_not_running">MIDlet 未运行</string>
+    <string name="memory_search_failed">搜索失败：%1$s</string>
+    <string name="memory_search_write">写入</string>
+    <string name="memory_search_lock">锁定</string>
+    <string name="memory_search_unlock">解锁</string>
+    <string name="memory_search_write_failed">写入失败</string>
+    <string-array name="memory_search_modes">
+        <item>等于</item>
+        <item>大于</item>
+        <item>小于</item>
+        <item>范围</item>
+        <item>已变化</item>
+        <item>未变化</item>
+        <item>增加</item>
+        <item>减少</item>
+    </string-array>
 </resources>

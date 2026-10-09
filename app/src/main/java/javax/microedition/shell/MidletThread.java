@@ -103,6 +103,10 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 		Process.killProcess(Process.myPid());
 	}
 
+	public static MIDlet getMidlet() {
+		return instance != null ? instance.midlet : null;
+	}
+
 	public static void notifyPaused() {
 		instance.state = PAUSED;
 	}

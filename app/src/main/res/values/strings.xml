@@ -282,4 +282,37 @@
     <string name="default_label">"%s (default)"</string>
     <string name="not_saved_exists">Already exists</string>
     <string name="alert_rewrite_profile">A profile named \"%1$s\" already exists.\nDo you want to overwrite it?</string>
+    <string name="memory_search">Memory search</string>
+    <string name="memory_search_title">Memory search</string>
+    <string name="memory_search_minimize">Minimize</string>
+    <string name="memory_search_minimize_symbol">&#8212;</string>
+    <string name="memory_search_value">Value</string>
+    <string name="memory_search_value_max">Max value</string>
+    <string name="memory_search_first">First scan</string>
+    <string name="memory_search_next">Next scan</string>
+    <string name="memory_search_reset">Reset</string>
+    <string name="memory_search_unlock_all">Unlock all</string>
+    <string name="memory_search_scanning">Scanning…</string>
+    <string name="memory_search_status">Results: %1$d, locked: %2$d</string>
+    <string name="memory_search_truncated">(truncated, refine the search)</string>
+    <string name="memory_search_need_first">Run the first scan with a value condition</string>
+    <string name="memory_search_need_results">Run the first scan before the next scan</string>
+    <string name="memory_search_mode_not_supported">This mode is only available for numeric types</string>
+    <string name="memory_search_invalid_value">Invalid value</string>
+    <string name="memory_search_not_running">MIDlet is not running</string>
+    <string name="memory_search_failed">Scan failed: %1$s</string>
+    <string name="memory_search_write">Write</string>
+    <string name="memory_search_lock">Lock</string>
+    <string name="memory_search_unlock">Unlock</string>
+    <string name="memory_search_write_failed">Write failed</string>
+    <string-array name="memory_search_modes">
+        <item>Equal</item>
+        <item>Greater than</item>
+        <item>Less than</item>
+        <item>Range</item>
+        <item>Changed</item>
+        <item>Unchanged</item>
+        <item>Increased</item>
+        <item>Decreased</item>
+    </string-array>
 </resources>
