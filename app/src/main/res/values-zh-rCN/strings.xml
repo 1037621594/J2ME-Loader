@@ -11,8 +11,10 @@
     <string name="save_log">保存日志</string>
     <string name="backup_save">备份存档</string>
     <string name="restore_save">恢复存档</string>
+    <string name="restore_save_external_confirm">恢复前将关闭游戏进程并替换存档，是否继续？</string>
     <string name="restore_save_confirm">当前存档将被备份覆盖，游戏会重新启动。是否继续？</string>
     <string name="backup_done">已备份到 JavaGame/Save</string>
+    <string name="restore_done">存档恢复成功</string>
     <string name="backup_failed">备份操作失败</string>
     <string name="backup_not_found">没有找到该游戏的备份</string>
     <string name="backup_need_permission">请授予“所有文件访问权限”，以便把备份写入 JavaGame/Save，授权后再重试</string>

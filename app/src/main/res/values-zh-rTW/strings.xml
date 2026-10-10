@@ -11,8 +11,10 @@
     <string name="save_log">儲存紀錄</string>
     <string name="backup_save">備份存檔</string>
     <string name="restore_save">還原存檔</string>
+    <string name="restore_save_external_confirm">還原前將關閉遊戲程序並替換存檔，是否繼續？</string>
     <string name="restore_save_confirm">目前的存檔將被備份覆蓋，遊戲會重新啟動。是否繼續？</string>
     <string name="backup_done">已備份到 JavaGame/Save</string>
+    <string name="restore_done">存檔還原成功</string>
     <string name="backup_failed">備份操作失敗</string>
     <string name="backup_not_found">找不到此遊戲的備份</string>
     <string name="backup_need_permission">請授予「所有檔案存取權限」，以便將備份寫入 JavaGame/Save，授權後再重試</string>

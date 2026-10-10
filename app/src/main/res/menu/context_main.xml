@@ -13,6 +13,12 @@
         android:id="@+id/action_context_reinstall"
         android:title="@string/action_reinstall" />
     <item
+        android:id="@+id/action_context_backup_save"
+        android:title="@string/backup_save" />
+    <item
+        android:id="@+id/action_context_restore_save"
+        android:title="@string/restore_save" />
+    <item
         android:id="@+id/action_context_delete"
         android:title="@string/action_context_delete" />
 </menu>

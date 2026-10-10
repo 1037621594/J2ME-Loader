@@ -15,8 +15,10 @@
     <string name="save_log">Save log</string>
     <string name="backup_save">Backup save</string>
     <string name="restore_save">Restore save</string>
+    <string name="restore_save_external_confirm">The game process will be closed before replacing the save data. Continue?</string>
     <string name="restore_save_confirm">Current save data will be replaced by the backup and the game will restart. Continue?</string>
     <string name="backup_done">Backup saved to JavaGame/Save</string>
+    <string name="restore_done">Save restored</string>
     <string name="backup_failed">Backup operation failed</string>
     <string name="backup_not_found">No backup found for this game</string>
     <string name="backup_need_permission">Grant "All files access" so backups can be written to JavaGame/Save, then try again</string>

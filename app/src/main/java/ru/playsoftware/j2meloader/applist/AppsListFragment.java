@@ -250,6 +250,8 @@ public class AppsListFragment extends ListFragment {
 		if (!new File(appItem.getPathExt() + Config.MIDLET_RES_FILE).exists()) {
 			menu.findItem(R.id.action_context_reinstall).setVisible(false);
 		}
+		menu.findItem(R.id.action_context_restore_save)
+				.setVisible(BackupManager.backupExists(new File(appItem.getPathExt())));
 	}
 
 	@Override
@@ -266,12 +268,100 @@ public class AppsListFragment extends ListFragment {
 			Config.startApp(requireActivity(), appItem.getTitle(), appItem.getPathExt(), true);
 		} else if (itemId == R.id.action_context_reinstall) {
 			InstallerDialog.newInstance(appItem.getId()).show(getParentFragmentManager(), "installer");
+		} else if (itemId == R.id.action_context_backup_save) {
+			startAppBackupTask(appItem, false);
+		} else if (itemId == R.id.action_context_restore_save) {
+			startAppBackupTask(appItem, true);
 		} else if (itemId == R.id.action_context_delete) {
 			alertDelete(appItem);
 		} else {
 			return super.onContextItemSelected(item);
 		}
 		return true;
+	}
+
+	private void startAppBackupTask(AppItem appItem, boolean restore) {
+		FragmentActivity activity = requireActivity();
+		if (!StoragePermission.hasAccess(activity)) {
+			Toast.makeText(activity, R.string.backup_need_permission, Toast.LENGTH_LONG).show();
+			StoragePermission.request(activity);
+			return;
+		}
+		File appDir = new File(appItem.getPathExt());
+		if (restore && !BackupManager.backupExists(appDir)) {
+			Toast.makeText(activity, R.string.backup_not_found, Toast.LENGTH_LONG).show();
+			return;
+		}
+		if (!restore && isMidletProcessRunning(activity)) {
+			Toast.makeText(activity, R.string.backup_midlet_running, Toast.LENGTH_LONG).show();
+			return;
+		}
+		int message = restore ? R.string.restore_save_external_confirm : R.string.backup_save;
+		new AlertDialog.Builder(activity)
+				.setTitle(restore ? R.string.restore_save : R.string.backup_save)
+				.setMessage(message)
+				.setNegativeButton(android.R.string.cancel, null)
+				.setPositiveButton(android.R.string.ok, (dialog, which) -> {
+					runAppBackupTask(appItem, restore);
+				})
+				.show();
+	}
+
+	private void runAppBackupTask(AppItem appItem, boolean restore) {
+		FragmentActivity activity = requireActivity();
+		AlertDialog progress = new AlertDialog.Builder(activity)
+				.setMessage(R.string.backup_in_progress)
+				.setCancelable(false)
+				.show();
+		Single.fromCallable(() -> {
+			if (restore) {
+				stopMidletProcess(activity);
+				waitForMidletProcess(activity);
+				BackupManager.restoreApp(new File(appItem.getPathExt()));
+				return null;
+			}
+			if (isMidletProcessRunning(activity)) {
+				throw new IllegalStateException("MIDlet process is running");
+			}
+			BackupManager.backupApp(new File(appItem.getPathExt()), false);
+			return null;
+		})
+				.subscribeOn(Schedulers.io())
+				.observeOn(AndroidSchedulers.mainThread())
+				.subscribe(ignored -> {
+					progress.dismiss();
+					Toast.makeText(activity, restore ? R.string.restore_done : R.string.backup_done,
+							Toast.LENGTH_SHORT).show();
+				}, error -> {
+					progress.dismiss();
+					Log.e(TAG, "App save operation failed: " + appItem.getPathExt(), error);
+					Toast.makeText(activity, R.string.backup_failed, Toast.LENGTH_LONG).show();
+				});
+	}
+
+	private static void stopMidletProcess(Context context) {
+		ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+		Log.i(TAG, "Stopping MIDlet process before save operation");
+		List<ActivityManager.RunningAppProcessInfo> processes = am.getRunningAppProcesses();
+		if (processes != null) {
+			String midletProcess = context.getPackageName() + ":midlet";
+			for (ActivityManager.RunningAppProcessInfo info : processes) {
+				if (midletProcess.equals(info.processName)) {
+					Log.i(TAG, "Killing MIDlet process pid=" + info.pid);
+					android.os.Process.killProcess(info.pid);
+				}
+			}
+		}
+		am.killBackgroundProcesses(context.getPackageName() + ":midlet");
+	}
+
+	private static void waitForMidletProcess(Context context) throws InterruptedException {
+		for (int i = 0; i < 20 && isMidletProcessRunning(context); i++) {
+			Thread.sleep(100);
+		}
+		if (isMidletProcessRunning(context)) {
+			throw new IllegalStateException("MIDlet process is still running");
+		}
 	}
 
 	private void requestAddShortcut(AppItem appItem) {

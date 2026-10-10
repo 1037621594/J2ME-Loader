@@ -83,8 +83,6 @@ import io.reactivex.SingleObserver;
 import io.reactivex.disposables.Disposable;
 import ru.playsoftware.j2meloader.BuildConfig;
 import ru.playsoftware.j2meloader.R;
-import ru.playsoftware.j2meloader.backup.BackupManager;
-import ru.playsoftware.j2meloader.backup.StoragePermission;
 import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.databinding.ActivityMicroBinding;
 import ru.playsoftware.j2meloader.memsearch.MemorySearchPanel;
@@ -479,10 +477,6 @@ public class MicroActivity extends AppCompatActivity {
 				memorySearchPanel = new MemorySearchPanel(this, binding.midletFrame);
 			}
 			memorySearchPanel.toggle();
-		} else if (id == R.id.action_backup_save) {
-			backupSave();
-		} else if (id == R.id.action_restore_save) {
-			restoreSave();
 		} else if (id == R.id.action_save_log) {
 			saveLog();
 		} else if (id == R.id.action_lock_orientation) {
@@ -658,47 +652,6 @@ public class MicroActivity extends AppCompatActivity {
 				})
 				.setNegativeButton(android.R.string.cancel, null)
 				.setNeutralButton(R.string.reset, ((d, which) -> microLoader.setLimitFps(-1)))
-				.show();
-	}
-
-	private void backupSave() {
-		if (!StoragePermission.hasAccess(this)) {
-			Toast.makeText(this, R.string.backup_need_permission, Toast.LENGTH_LONG).show();
-			StoragePermission.request(this);
-			return;
-		}
-		final File appDir = new File(appPath);
-		new Thread(() -> {
-			try {
-				BackupManager.backupApp(appDir, false);
-				runOnUiThread(() -> Toast.makeText(this, R.string.backup_done, Toast.LENGTH_SHORT).show());
-			} catch (Exception e) {
-				Log.e(TAG, "Backup failed", e);
-				runOnUiThread(() -> Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_LONG).show());
-			}
-		}, "BackupSave").start();
-	}
-
-	private void restoreSave() {
-		if (!StoragePermission.hasAccess(this)) {
-			Toast.makeText(this, R.string.backup_need_permission, Toast.LENGTH_LONG).show();
-			StoragePermission.request(this);
-			return;
-		}
-		final File appDir = new File(appPath);
-		if (!BackupManager.backupExists(appDir)) {
-			Toast.makeText(this, R.string.backup_not_found, Toast.LENGTH_LONG).show();
-			return;
-		}
-		new AlertDialog.Builder(this)
-				.setTitle(R.string.restore_save)
-				.setMessage(R.string.restore_save_confirm)
-				.setNegativeButton(android.R.string.cancel, null)
-				.setPositiveButton(android.R.string.ok, (d, w) -> {
-					String[] restartArgs = {appName, appPath, startArguments, selectedMidletClass};
-					MidletThread.restoreBackup(appDir, restartArgs, error ->
-							Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_LONG).show());
-				})
 				.show();
 	}
 
