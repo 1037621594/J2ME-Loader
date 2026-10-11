@@ -1,5 +1,10 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
+        android:icon="@drawable/ic_action_speed"
+        android:id="@+id/action_game_speed_toggle"
+        android:title="@string/game_speed_toggle"
+        android:checkable="true" />
+    <item
         android:icon="@drawable/ic_action_search"
         android:id="@+id/action_memory_search"
         android:title="@string/memory_search" />

@@ -172,6 +172,9 @@ public class MemorySearchPanel {
 			imm.hideSoftInputFromWindow(panel.getWindowToken(), 0);
 		}
 		panel.setVisibility(View.GONE);
+		panel.setAlpha(1f);
+		panel.setTranslationZ(0f);
+		host.invalidate();
 	}
 
 	private ValueType selectedType() {

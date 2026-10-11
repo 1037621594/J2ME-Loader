@@ -95,6 +95,7 @@
     <string name="PREF_FORCE_FULLSCREEN">Force fullscreen</string>
     <string name="PREF_LIMIT_FPS">Limit FPS</string>
     <string name="turbo_mode">Turbo mode (unlimited FPS)</string>
+    <string name="game_speed_toggle">Speed up</string>
     <string name="game_speed">Game speed</string>
     <string-array name="game_speed_values">
         <item>1x</item>

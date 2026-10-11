@@ -81,6 +81,7 @@
     <string name="PREF_FORCE_FULLSCREEN">强制全屏</string>
     <string name="PREF_LIMIT_FPS">限制 FPS</string>
     <string name="turbo_mode">极速模式（不限帧率）</string>
+    <string name="game_speed_toggle">&#21152;&#36895;</string>
     <string name="game_speed">游戏速度</string>
     <string-array name="game_speed_values">
         <item>1x</item>

@@ -95,6 +95,9 @@ public class MicroActivity extends AppCompatActivity {
 	private static final int ORIENTATION_AUTO = 1;
 	private static final int ORIENTATION_PORTRAIT = 2;
 	private static final int ORIENTATION_LANDSCAPE = 3;
+	private static final String PREF_GAME_SPEED_MULTIPLIER = "game_speed_multiplier";
+	private static final String PREF_GAME_SPEED_ENABLED = "game_speed_enabled";
+	private static final float DEFAULT_GAME_SPEED_MULTIPLIER = 1.5f;
 
 	private Displayable current;
 	private boolean visible;
@@ -179,6 +182,8 @@ public class MicroActivity extends AppCompatActivity {
 			return;
 		}
 		microLoader.applyConfiguration();
+		microLoader.setSpeedMultiplier(sp.getBoolean(PREF_GAME_SPEED_ENABLED, false)
+				? sp.getFloat(PREF_GAME_SPEED_MULTIPLIER, DEFAULT_GAME_SPEED_MULTIPLIER) : 1f);
 		VirtualKeyboard vk = ContextHolder.getVk();
 		int orientation = microLoader.getOrientation();
 		if (vk != null) {
@@ -438,6 +443,7 @@ public class MicroActivity extends AppCompatActivity {
 			menu.findItem(R.id.action_lock_orientation).setVisible(true);
 		}
 		menu.findItem(R.id.action_memory_search).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+		menu.findItem(R.id.action_game_speed_toggle).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 		if (actionBarEnabled) {
 			menu.findItem(R.id.action_ime_keyboard).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 			menu.findItem(R.id.action_take_screenshot).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
@@ -455,7 +461,9 @@ public class MicroActivity extends AppCompatActivity {
 	public boolean onPrepareOptionsMenu(Menu menu) {
 		if (current instanceof Canvas) {
 			menu.setGroupVisible(R.id.action_group_canvas, true);
+			menu.findItem(R.id.action_game_speed_toggle).setVisible(true);
 			menu.findItem(R.id.action_turbo_mode).setChecked(microLoader.isTurboMode());
+			menu.findItem(R.id.action_game_speed_toggle).setChecked(isGameSpeedEnabled());
 			VirtualKeyboard vk = ContextHolder.getVk();
 			if (vk != null) {
 				boolean visible = vk.getLayoutEditMode() != VirtualKeyboard.LAYOUT_EOF;
@@ -463,6 +471,7 @@ public class MicroActivity extends AppCompatActivity {
 			}
 		} else {
 			menu.setGroupVisible(R.id.action_group_canvas, false);
+			menu.findItem(R.id.action_game_speed_toggle).setVisible(false);
 		}
 		return true;
 	}
@@ -477,6 +486,12 @@ public class MicroActivity extends AppCompatActivity {
 				memorySearchPanel = new MemorySearchPanel(this, binding.midletFrame);
 			}
 			memorySearchPanel.toggle();
+		} else if (id == R.id.action_game_speed_toggle) {
+			boolean enabled = !isGameSpeedEnabled();
+			PreferenceManager.getDefaultSharedPreferences(this).edit()
+					.putBoolean(PREF_GAME_SPEED_ENABLED, enabled).apply();
+			microLoader.setSpeedMultiplier(enabled ? getSelectedGameSpeedMultiplier() : 1f);
+			item.setChecked(enabled);
 		} else if (id == R.id.action_save_log) {
 			saveLog();
 		} else if (id == R.id.action_lock_orientation) {
@@ -657,7 +672,7 @@ public class MicroActivity extends AppCompatActivity {
 
 	private void showGameSpeedDialog() {
 		final float[] multipliers = {1f, 1.25f, 1.5f, 1.75f, 2f, 3f};
-		float currentMultiplier = microLoader.getSpeedMultiplier();
+		float currentMultiplier = getSelectedGameSpeedMultiplier();
 		int checked = 0;
 		for (int i = 0; i < multipliers.length; i++) {
 			if (multipliers[i] == currentMultiplier) {
@@ -668,10 +683,25 @@ public class MicroActivity extends AppCompatActivity {
 		new AlertDialog.Builder(this)
 				.setTitle(R.string.game_speed)
 				.setSingleChoiceItems(R.array.game_speed_values, checked, (dialog, which) -> {
-					microLoader.setSpeedMultiplier(multipliers[which]);
+					float multiplier = multipliers[which];
+					PreferenceManager.getDefaultSharedPreferences(this).edit()
+							.putFloat(PREF_GAME_SPEED_MULTIPLIER, multiplier).apply();
+					if (isGameSpeedEnabled()) {
+						microLoader.setSpeedMultiplier(multiplier);
+					}
 					dialog.dismiss();
 				})
 				.show();
+	}
+
+	private boolean isGameSpeedEnabled() {
+		return PreferenceManager.getDefaultSharedPreferences(this)
+				.getBoolean(PREF_GAME_SPEED_ENABLED, false);
+	}
+
+	private float getSelectedGameSpeedMultiplier() {
+		return PreferenceManager.getDefaultSharedPreferences(this)
+				.getFloat(PREF_GAME_SPEED_MULTIPLIER, DEFAULT_GAME_SPEED_MULTIPLIER);
 	}
 
 	@Override
