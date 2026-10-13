@@ -295,9 +295,11 @@
     <string name="memory_search_next">Next scan</string>
     <string name="memory_search_reset">Reset</string>
     <string name="memory_search_unlock_all">Unlock all</string>
+    <string name="memory_search_pause_game">Pause the game while open</string>
     <string name="memory_search_scanning">Scanning…</string>
     <string name="memory_search_status">Results: %1$d, locked: %2$d</string>
-    <string name="memory_search_truncated">(truncated, refine the search)</string>
+    <string name="memory_search_truncated">(%1$d more results ignored, narrow the search)</string>
+    <string name="memory_search_visit_limited">(scan stopped early, results may be incomplete)</string>
     <string name="memory_search_need_first">Run the first scan with a value condition</string>
     <string name="memory_search_need_results">Run the first scan before the next scan</string>
     <string name="memory_search_mode_not_supported">This mode is only available for numeric types</string>
@@ -307,6 +309,7 @@
     <string name="memory_search_write">Write</string>
     <string name="memory_search_lock">Lock</string>
     <string name="memory_search_unlock">Unlock</string>
+    <string name="memory_search_read_only">Read-only</string>
     <string name="memory_search_write_failed">Write failed</string>
     <string-array name="memory_search_modes">
         <item>Equal</item>

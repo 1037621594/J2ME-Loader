@@ -10,6 +10,7 @@ import lombok.Setter;
 @Getter
 @RequiredArgsConstructor
 public class MemoryHit {
+	/** The type of the value that was found, which may differ from the search type. */
 	private final ValueType type;
 	/** Owning instance for instance fields, the array for array elements, null for static fields. */
 	private final Object target;
@@ -19,6 +20,8 @@ public class MemoryHit {
 	private final String member;
 	/** Array index, -1 for plain fields. */
 	private final int index;
+	/** True when the location must not be written to, e.g. java.util container internals. */
+	private final boolean readOnly;
 
 	@Setter
 	private Object lastValue;

@@ -111,7 +111,12 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 		instance.state = PAUSED;
 	}
 
-	static void pauseApp() {
+	/** True when the MIDlet is running, so a pause would actually take effect. */
+	public static boolean isRunning() {
+		return instance != null && instance.state == STARTED;
+	}
+
+	public static void pauseApp() {
 		if (instance != null)
 			instance.handler.obtainMessage(PAUSE).sendToTarget();
 	}

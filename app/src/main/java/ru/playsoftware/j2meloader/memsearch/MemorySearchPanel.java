@@ -13,6 +13,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ListView;
@@ -52,12 +53,16 @@ public class MemorySearchPanel {
 	private Button firstButton;
 	private Button nextButton;
 	private TextView status;
+	private CheckBox pauseGameCheck;
 	private HitAdapter adapter;
 
 	private AtomicBoolean cancelToken = new AtomicBoolean();
 	private boolean scanning;
 	private boolean destroyed;
 	private boolean truncated;
+	private boolean visitLimited;
+	private long totalHits;
+	private boolean gamePaused;
 	private ValueType scanType;
 
 	private final Runnable refresh = new Runnable() {
@@ -96,6 +101,7 @@ public class MemorySearchPanel {
 		cancelToken.set(true);
 		uiHandler.removeCallbacks(refresh);
 		lockManager.unlockAll();
+		resumeGameIfPaused();
 	}
 
 	private void create() {
@@ -110,6 +116,7 @@ public class MemorySearchPanel {
 		firstButton = panel.findViewById(R.id.memory_search_first);
 		nextButton = panel.findViewById(R.id.memory_search_next);
 		status = panel.findViewById(R.id.memory_search_status);
+		pauseGameCheck = panel.findViewById(R.id.memory_search_pause_game);
 		ListView list = panel.findViewById(R.id.memory_search_list);
 
 		typeSpinner.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
@@ -147,10 +154,18 @@ public class MemorySearchPanel {
 			adapter.notifyDataSetChanged();
 			updateStatus();
 		});
+		pauseGameCheck.setOnCheckedChangeListener((view, checked) -> {
+			if (checked) {
+				pauseGameIfRunning();
+			} else if (gamePaused) {
+				resumeGameIfPaused();
+			}
+		});
 		updateStatus();
 	}
 
 	private void show() {
+		pauseGameIfRunning();
 		DisplayMetrics dm = activity.getResources().getDisplayMetrics();
 		int hostWidth = host.getWidth() > 0 ? host.getWidth() : dm.widthPixels;
 		int hostHeight = host.getHeight() > 0 ? host.getHeight() : dm.heightPixels;
@@ -166,6 +181,7 @@ public class MemorySearchPanel {
 	}
 
 	private void minimize() {
+		resumeGameIfPaused();
 		uiHandler.removeCallbacks(refresh);
 		InputMethodManager imm = (InputMethodManager) activity.getSystemService(MicroActivity.INPUT_METHOD_SERVICE);
 		if (imm != null) {
@@ -175,6 +191,27 @@ public class MemorySearchPanel {
 		panel.setAlpha(1f);
 		panel.setTranslationZ(0f);
 		host.invalidate();
+	}
+
+	/**
+	 * Pauses the MIDlet so a scan reads a stable snapshot. This goes through the game's own
+	 * pauseApp()/startApp() callbacks, so a game may show its pause menu, auto-save, or refuse
+	 * to resume, and a game throwing in pauseApp() is destroyed. Hence off by default.
+	 */
+	private void pauseGameIfRunning() {
+		if (pauseGameCheck.isChecked() && MidletThread.isRunning()) {
+			MidletThread.pauseApp();
+			gamePaused = true;
+		}
+	}
+
+	/** Resumes only a game this panel paused, leaving a game paused by the user alone. */
+	private void resumeGameIfPaused() {
+		if (!gamePaused) {
+			return;
+		}
+		gamePaused = false;
+		MidletThread.resumeApp();
 	}
 
 	private ValueType selectedType() {
@@ -317,7 +354,9 @@ public class MemorySearchPanel {
 		hits.clear();
 		hits.addAll(result.getHits());
 		scanType = type;
+		totalHits = result.getTotalHits();
 		truncated = result.isTruncated();
+		visitLimited = result.isVisitLimited();
 		adapter.notifyDataSetChanged();
 		updateStatus();
 	}
@@ -337,7 +376,9 @@ public class MemorySearchPanel {
 		endScan();
 		hits.clear();
 		scanType = null;
+		totalHits = 0;
 		truncated = false;
+		visitLimited = false;
 		adapter.notifyDataSetChanged();
 		updateStatus();
 	}
@@ -345,7 +386,10 @@ public class MemorySearchPanel {
 	private void updateStatus() {
 		String text = activity.getString(R.string.memory_search_status, hits.size(), lockManager.size());
 		if (truncated) {
-			text += " " + activity.getString(R.string.memory_search_truncated);
+			text += " " + activity.getString(R.string.memory_search_truncated, totalHits - hits.size());
+		}
+		if (visitLimited) {
+			text += " " + activity.getString(R.string.memory_search_visit_limited);
 		}
 		status.setText(text);
 	}
@@ -359,21 +403,25 @@ public class MemorySearchPanel {
 		} catch (Throwable ignored) {
 		}
 		input.setSelectAllOnFocus(true);
-		AlertDialog.Builder builder = new AlertDialog.Builder(activity)
-				.setTitle(hit.label())
-				.setView(input)
-				.setPositiveButton(R.string.memory_search_write,
-						(d, w) -> applyValue(hit, input.getText().toString(), false))
-				.setNegativeButton(android.R.string.cancel, null);
-		if (hit.isLocked()) {
-			builder.setNeutralButton(R.string.memory_search_unlock, (d, w) -> {
-				lockManager.unlock(hit);
-				adapter.notifyDataSetChanged();
-				updateStatus();
-			});
+		AlertDialog.Builder builder = new AlertDialog.Builder(activity).setTitle(hit.label()).setView(input);
+		if (hit.isReadOnly()) {
+			input.setEnabled(false);
+			builder.setMessage(activity.getString(R.string.memory_search_read_only))
+					.setNegativeButton(android.R.string.cancel, null);
 		} else {
-			builder.setNeutralButton(R.string.memory_search_lock,
-					(d, w) -> applyValue(hit, input.getText().toString(), true));
+			builder.setPositiveButton(R.string.memory_search_write,
+					(d, w) -> applyValue(hit, input.getText().toString(), false))
+					.setNegativeButton(android.R.string.cancel, null);
+			if (hit.isLocked()) {
+				builder.setNeutralButton(R.string.memory_search_unlock, (d, w) -> {
+					lockManager.unlock(hit);
+					adapter.notifyDataSetChanged();
+					updateStatus();
+				});
+			} else {
+				builder.setNeutralButton(R.string.memory_search_lock,
+						(d, w) -> applyValue(hit, input.getText().toString(), true));
+			}
 		}
 		builder.show();
 	}
@@ -438,6 +486,8 @@ public class MemorySearchPanel {
 			if (hit.isLocked()) {
 				value += "  [" + activity.getString(R.string.memory_search_lock) + " = "
 						+ hit.getType().format(hit.getLockValue()) + "]";
+			} else if (hit.isReadOnly()) {
+				value += "  [" + activity.getString(R.string.memory_search_read_only) + "]";
 			}
 			((TextView) row.findViewById(android.R.id.text2)).setText(value);
 			return row;

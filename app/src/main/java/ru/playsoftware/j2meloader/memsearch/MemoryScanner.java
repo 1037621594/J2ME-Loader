@@ -22,12 +22,19 @@ import dalvik.system.DexFile;
 import lombok.AllArgsConstructor;
 
 /**
- * Searches MIDlet heap state reachable through reflection: static fields of the MIDlet classes
- * and everything referenced from them, the MIDlet instance and the current displayable.
+ * Searches MIDlet heap state reachable through reflection: static fields of the MIDlet classes and
+ * everything referenced from them, the MIDlet instance and the current displayable.
+ *
+ * <p>Values are collected from primitive and boxed fields, from boxed or String values reached by
+ * reference (a map entry value, a Vector element), and from array elements. Values owned by
+ * java.util internals are reported read-only, because writing them can break the container.
  */
 public class MemoryScanner {
 	private static final String TAG = MemoryScanner.class.getSimpleName();
+	/** Hits kept in the result; further matches are only counted, never lost. */
 	private static final int MAX_HITS = 100_000;
+	/** Objects to visit before giving up; bounds the memory the visited set holds. */
+	private static final long MAX_VISITS = 500_000;
 
 	@AllArgsConstructor
 	private static final class Node {
@@ -49,7 +56,8 @@ public class MemoryScanner {
 	private final List<Node> deferredArrays = new ArrayList<>();
 	private final Map<Class<?>, Field[]> instanceFields = new HashMap<>();
 	private long visitedCount;
-	private boolean truncated;
+	private long totalHits;
+	private boolean visitLimited;
 
 	private MemoryScanner(ClassLoader loader, ValueType type, SearchMode mode, Object v1, Object v2,
 						  AtomicBoolean cancel) {
@@ -84,7 +92,7 @@ public class MemoryScanner {
 			} catch (Throwable ignored) {
 			}
 		}
-		return new ScanResult(result, false, 0);
+		return new ScanResult(result, result.size(), false, 0, false);
 	}
 
 	@SuppressWarnings("deprecation")
@@ -131,7 +139,8 @@ public class MemoryScanner {
 		}
 		switch (mode) {
 			case EQUAL:
-				return cur.equals(v1);
+				// With ANY the value and the field can have different types, so compare numerically.
+				return type == ValueType.ANY ? compare(cur, v1) == 0 : cur.equals(v1);
 			case CHANGED:
 				return prev != null && !cur.equals(prev);
 			case UNCHANGED:
@@ -167,7 +176,7 @@ public class MemoryScanner {
 
 	private ScanResult run(Object[] roots, List<String> classNames) {
 		for (String name : classNames) {
-			if (cancel.get() || truncated) {
+			if (cancel.get() || visitLimited) {
 				break;
 			}
 			try {
@@ -193,18 +202,22 @@ public class MemoryScanner {
 		}
 		drain();
 		for (Node node : deferredArrays) {
-			if (cancel.get() || truncated) {
+			if (cancel.get() || visitLimited) {
 				break;
 			}
 			scanPrimitiveArray(node);
 		}
-		return new ScanResult(hits, truncated, visitedCount);
+		return new ScanResult(hits, totalHits, totalHits > hits.size(), visitedCount, visitLimited);
 	}
 
 	private void drain() {
-		while (!stack.isEmpty() && !cancel.get() && !truncated) {
+		while (!stack.isEmpty() && !cancel.get() && !visitLimited) {
 			Node node = stack.pop();
 			visitedCount++;
+			if (visitedCount > MAX_VISITS) {
+				visitLimited = true;
+				break;
+			}
 			try {
 				visit(node);
 			} catch (Throwable t) {
@@ -224,8 +237,31 @@ public class MemoryScanner {
 
 	private boolean isTraversable(Class<?> c) {
 		if (c.isArray()) {
-			return !c.getComponentType().isPrimitive() || c.getComponentType() == type.getFieldClass();
+			Class<?> comp = c.getComponentType();
+			if (!comp.isPrimitive()) {
+				return true;
+			}
+			// Reading a primitive array only pays off for its own element type.
+			return type == ValueType.ANY || comp == type.getFieldClass();
 		}
+		return isAppClass(c) || c.getName().startsWith("java.util.");
+	}
+
+	/**
+	 * Field values are accepted from app classes and from java.util container internals
+	 * (HashMap$Node, TreeMap$Entry &amp; co.), which is where values stored in maps live. Top-level
+	 * java.util classes are excluded so structural fields such as Vector.size are not reported.
+	 */
+	private boolean isFieldValueSource(Class<?> c) {
+		if (isAppClass(c)) {
+			return true;
+		}
+		String name = c.getName();
+		return name.startsWith("java.util.") && name.indexOf('$') >= 0;
+	}
+
+	/** Array elements are accepted from app classes and from any java.util backing array. */
+	private boolean isArrayValueSource(Class<?> c) {
 		return isAppClass(c) || c.getName().startsWith("java.util.");
 	}
 
@@ -244,23 +280,21 @@ public class MemoryScanner {
 			Class<?> comp = c.getComponentType();
 			if (comp.isPrimitive()) {
 				deferredArrays.add(node);
-			} else if (comp == String.class) {
-				if (type == ValueType.STRING) {
-					scanObjectArray(node);
+				return;
+			}
+			Object[] arr = (Object[]) node.obj;
+			for (int i = 0; i < arr.length && !visitLimited; i++) {
+				Object e = arr[i];
+				if (e == null) {
+					continue;
 				}
-			} else {
-				Object[] arr = (Object[]) node.obj;
-				String member = node.member + "[]";
-				for (Object e : arr) {
-					if (e != null) {
-						push(e, node.owner, member);
-					}
-				}
+				checkArrayValue(arr, node.owner, node.member, i, e);
+				push(e, node.owner, node.member + "[]");
 			}
 			return;
 		}
 		for (Field f : instanceFieldsOf(c)) {
-			if (truncated) {
+			if (visitLimited) {
 				return;
 			}
 			processField(node.obj, f);
@@ -293,59 +327,79 @@ public class MemoryScanner {
 	}
 
 	private void processField(Object holder, Field f) throws IllegalAccessException {
-		Class<?> ft = f.getType();
-		boolean isStatic = holder == null;
-		if (ft.isPrimitive() || ft == String.class) {
-			if (ft != type.getFieldClass() || !isAppClass(f.getDeclaringClass())) {
-				return;
-			}
-			if (isStatic && Modifier.isFinal(f.getModifiers())) {
-				return;
-			}
-			Object cur = ValueType.normalize(f.get(holder));
-			if (test(type, mode, cur, null, v1, v2)) {
-				MemoryHit hit = new MemoryHit(type, holder, f, f.getDeclaringClass(), f.getName(), -1);
-				hit.setLastValue(cur);
-				addHit(hit);
-			}
+		if (f.getType().isPrimitive()) {
+			// Field.get boxes primitives, so primitive and boxed fields share one path.
+			checkFieldValue(holder, f, f.get(holder));
 			return;
 		}
 		Object value = f.get(holder);
-		if (value != null) {
-			push(value, f.getDeclaringClass(), f.getName());
+		if (value == null) {
+			return;
+		}
+		// A boxed or String value reached by reference, e.g. a Vector element or a map value.
+		checkFieldValue(holder, f, value);
+		push(value, f.getDeclaringClass(), f.getName());
+	}
+
+	private void checkFieldValue(Object holder, Field f, Object value) {
+		Class<?> declaring = f.getDeclaringClass();
+		if (!isFieldValueSource(declaring)
+				|| (Modifier.isStatic(f.getModifiers()) && Modifier.isFinal(f.getModifiers()))) {
+			return;
+		}
+		MemoryHit hit = valueHit(holder, f, declaring, f.getName(), -1, value);
+		if (hit != null) {
+			addHit(hit);
 		}
 	}
 
-	private void scanObjectArray(Node node) {
-		Object[] arr = (Object[]) node.obj;
-		for (int i = 0; i < arr.length && !truncated; i++) {
-			Object cur = arr[i];
-			if (cur != null && test(type, mode, cur, null, v1, v2)) {
-				MemoryHit hit = new MemoryHit(type, arr, null, node.owner, node.member, i);
-				hit.setLastValue(cur);
-				addHit(hit);
-			}
+	private void checkArrayValue(Object array, Class<?> owner, String member, int index, Object value) {
+		if (!isArrayValueSource(owner)) {
+			return;
 		}
+		MemoryHit hit = valueHit(array, null, owner, member, index, value);
+		if (hit != null) {
+			addHit(hit);
+		}
+	}
+
+	/** Builds a hit when {@code value} matches the current search, or null when it does not. */
+	private MemoryHit valueHit(Object target, Field field, Class<?> owner, String member, int index,
+							   Object value) {
+		if (value == null) {
+			return null;
+		}
+		ValueType fieldType = ValueType.forFieldClass(value.getClass());
+		if (fieldType == null || !type.matches(fieldType)) {
+			return null;
+		}
+		Object cur = ValueType.normalize(value);
+		if (!test(type, mode, cur, null, v1, v2)) {
+			return null;
+		}
+		MemoryHit hit = new MemoryHit(fieldType, target, field, owner, member, index, !isAppClass(owner));
+		hit.setLastValue(cur);
+		return hit;
 	}
 
 	private void scanPrimitiveArray(Node node) {
+		if (!isArrayValueSource(node.owner)) {
+			return;
+		}
 		Object arr = node.obj;
 		int len = Array.getLength(arr);
-		for (int i = 0; i < len && !truncated; i++) {
-			Object cur = ValueType.normalize(Array.get(arr, i));
-			if (test(type, mode, cur, null, v1, v2)) {
-				MemoryHit hit = new MemoryHit(type, arr, null, node.owner, node.member, i);
-				hit.setLastValue(cur);
+		for (int i = 0; i < len && !visitLimited; i++) {
+			MemoryHit hit = valueHit(arr, null, node.owner, node.member, i, Array.get(arr, i));
+			if (hit != null) {
 				addHit(hit);
 			}
 		}
 	}
 
 	private void addHit(MemoryHit hit) {
-		if (hits.size() >= MAX_HITS) {
-			truncated = true;
-			return;
+		totalHits++;
+		if (hits.size() < MAX_HITS) {
+			hits.add(hit);
 		}
-		hits.add(hit);
 	}
 }

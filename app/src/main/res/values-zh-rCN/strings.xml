@@ -240,9 +240,11 @@
     <string name="memory_search_next">再次搜索</string>
     <string name="memory_search_reset">重置</string>
     <string name="memory_search_unlock_all">全部解锁</string>
+    <string name="memory_search_pause_game">打开时暂停游戏</string>
     <string name="memory_search_scanning">搜索中…</string>
     <string name="memory_search_status">结果：%1$d，已锁定：%2$d</string>
-    <string name="memory_search_truncated">（结果过多已截断，请缩小范围）</string>
+    <string name="memory_search_truncated">（另有 %1$d 条结果被忽略，请缩小范围）</string>
+    <string name="memory_search_visit_limited">（扫描提前结束，结果可能不完整）</string>
     <string name="memory_search_need_first">首次搜索需要指定数值条件</string>
     <string name="memory_search_need_results">请先进行首次搜索</string>
     <string name="memory_search_mode_not_supported">该模式仅支持数值类型</string>
@@ -252,6 +254,7 @@
     <string name="memory_search_write">写入</string>
     <string name="memory_search_lock">锁定</string>
     <string name="memory_search_unlock">解锁</string>
+    <string name="memory_search_read_only">只读</string>
     <string name="memory_search_write_failed">写入失败</string>
     <string-array name="memory_search_modes">
         <item>等于</item>

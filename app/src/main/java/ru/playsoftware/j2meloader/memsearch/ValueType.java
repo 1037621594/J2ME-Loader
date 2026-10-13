@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum ValueType {
+	/** Matches every numeric field type, for when the user does not know which one is used. */
+	ANY(Number.class, 0, 0),
 	BYTE(byte.class, Byte.MIN_VALUE, Byte.MAX_VALUE),
 	SHORT(short.class, Short.MIN_VALUE, Short.MAX_VALUE),
 	INT(int.class, Integer.MIN_VALUE, Integer.MAX_VALUE),
@@ -19,12 +21,52 @@ public enum ValueType {
 	private final long min;
 	private final long max;
 
+	@Override
+	public String toString() {
+		return this == ANY ? "Auto" : super.toString();
+	}
+
+	/** The type a field of the given declared class carries, or null when it is not searchable. */
+	public static ValueType forFieldClass(Class<?> c) {
+		if (c == byte.class || c == Byte.class) {
+			return BYTE;
+		}
+		if (c == short.class || c == Short.class) {
+			return SHORT;
+		}
+		if (c == int.class || c == Integer.class) {
+			return INT;
+		}
+		if (c == long.class || c == Long.class) {
+			return LONG;
+		}
+		if (c == float.class || c == Float.class) {
+			return FLOAT;
+		}
+		if (c == double.class || c == Double.class) {
+			return DOUBLE;
+		}
+		if (c == boolean.class || c == Boolean.class) {
+			return BOOLEAN;
+		}
+		if (c == String.class) {
+			return STRING;
+		}
+		return null;
+	}
+
+	/** True when a value of the given field type counts for this search type. */
+	public boolean matches(ValueType field) {
+		return this == ANY ? field.isNumeric() : this == field;
+	}
+
 	public boolean isInteger() {
 		return this == BYTE || this == SHORT || this == INT || this == LONG;
 	}
 
+	/** ANY accepts both integers and decimals, so its input allows a fraction. */
 	public boolean isFloating() {
-		return this == FLOAT || this == DOUBLE;
+		return this == FLOAT || this == DOUBLE || this == ANY;
 	}
 
 	public boolean isNumeric() {
@@ -48,6 +90,13 @@ public enum ValueType {
 				throw new NumberFormatException(text);
 			case STRING:
 				return text;
+			case ANY:
+				// An integer literal stays exact, anything else is read as a double.
+				try {
+					return Long.parseLong(s);
+				} catch (NumberFormatException e) {
+					return Double.parseDouble(s);
+				}
 			case FLOAT:
 				return (double) Float.parseFloat(s);
 			case DOUBLE:
