@@ -373,8 +373,8 @@ public class MemorySearchPanel {
 
 	private void showHitMenu(MemoryHit hit) {
 		Class<?> cls = hit.getOwnerClass();
-		String name = cls.getName();
-		name = name.substring(name.lastIndexOf('.') + 1);
+		String fullName = cls.getName();
+		String name = fullName.substring(fullName.lastIndexOf('.') + 1);
 		String[] items = {activity.getString(R.string.memory_search_list_instances, name)};
 		new AlertDialog.Builder(activity)
 				.setTitle(hit.label())
