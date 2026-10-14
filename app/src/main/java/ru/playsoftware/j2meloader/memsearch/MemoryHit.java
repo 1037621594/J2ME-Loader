@@ -23,6 +23,9 @@ public class MemoryHit {
 	/** True when the location must not be written to, e.g. java.util container internals. */
 	private final boolean readOnly;
 
+	/** 1-based number of the owning instance in an instance listing, 0 otherwise. */
+	@Setter
+	private int instanceNo;
 	@Setter
 	private Object lastValue;
 	@Setter
@@ -37,7 +40,11 @@ public class MemoryHit {
 	public String label() {
 		String name = ownerClass.getName();
 		name = name.substring(name.lastIndexOf('.') + 1);
-		StringBuilder sb = new StringBuilder(name).append('.').append(member);
+		StringBuilder sb = new StringBuilder(name);
+		if (instanceNo > 0) {
+			sb.append('#').append(instanceNo);
+		}
+		sb.append('.').append(member);
 		if (index >= 0) {
 			sb.append('[').append(index).append(']');
 		}

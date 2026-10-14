@@ -256,6 +256,9 @@
     <string name="memory_search_unlock">解锁</string>
     <string name="memory_search_read_only">只读</string>
     <string name="memory_search_write_failed">写入失败</string>
+    <string name="memory_search_list_instances">显示 %1$s 的所有对象</string>
+    <string name="memory_search_list_instances_unsupported">容器内部类不支持显示对象</string>
+    <string name="memory_search_listing">[%1$s 所有对象]</string>
     <string-array name="memory_search_modes">
         <item>等于</item>
         <item>大于</item>

@@ -49,30 +49,46 @@ public class MemoryScanner {
 	private final Object v1;
 	private final Object v2;
 	private final AtomicBoolean cancel;
+	/** Class whose instances are listed, null for a value search. */
+	private final Class<?> instanceClass;
 
 	private final List<MemoryHit> hits = new ArrayList<>();
 	private final Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
 	private final ArrayDeque<Node> stack = new ArrayDeque<>();
-	private final List<Node> deferredArrays = new ArrayList<>();
 	private final Map<Class<?>, Field[]> instanceFields = new HashMap<>();
 	private long visitedCount;
 	private long totalHits;
 	private boolean visitLimited;
+	private int instanceCount;
 
 	private MemoryScanner(ClassLoader loader, ValueType type, SearchMode mode, Object v1, Object v2,
-						  AtomicBoolean cancel) {
+						  AtomicBoolean cancel, Class<?> instanceClass) {
 		this.loader = loader;
 		this.type = type;
 		this.mode = mode;
 		this.v1 = v1;
 		this.v2 = v2;
 		this.cancel = cancel;
+		this.instanceClass = instanceClass;
 	}
 
 	public static ScanResult firstScan(ClassLoader loader, Object[] roots, List<String> classNames,
 									   ValueType type, SearchMode mode, Object v1, Object v2,
 									   AtomicBoolean cancel) {
-		MemoryScanner scanner = new MemoryScanner(loader, type, mode, v1, v2, cancel);
+		MemoryScanner scanner = new MemoryScanner(loader, type, mode, v1, v2, cancel, null);
+		return scanner.run(roots, classNames);
+	}
+
+	/**
+	 * Lists every reachable instance of {@code cls} (subclasses included) together with the static
+	 * fields of {@code cls}: one hit per searchable field, per element of a primitive array field
+	 * and per element of a 2D primitive array field. Hits carry their instance number.
+	 */
+	public static ScanResult findInstances(ClassLoader loader, Object[] roots, List<String> classNames,
+										   Class<?> cls, AtomicBoolean cancel) {
+		// ANY keeps every primitive array traversable; value checks are off in this mode.
+		MemoryScanner scanner = new MemoryScanner(loader, ValueType.ANY, SearchMode.EQUAL, null, null,
+				cancel, cls);
 		return scanner.run(roots, classNames);
 	}
 
@@ -139,12 +155,11 @@ public class MemoryScanner {
 		}
 		switch (mode) {
 			case EQUAL:
-				// With ANY the value and the field can have different types, so compare numerically.
-				return type == ValueType.ANY ? compare(cur, v1) == 0 : cur.equals(v1);
+				return sameValue(cur, v1);
 			case CHANGED:
-				return prev != null && !cur.equals(prev);
+				return prev != null && !sameValue(cur, prev);
 			case UNCHANGED:
-				return cur.equals(prev);
+				return sameValue(cur, prev);
 			default:
 				break;
 		}
@@ -167,6 +182,18 @@ public class MemoryScanner {
 		}
 	}
 
+	/**
+	 * Numbers compare by value, not by boxed class: a hit found with ANY keeps its own field type
+	 * (a float field normalized to Double) while the rescan input is parsed as ANY (a Long), and
+	 * Double.equals(Long) would drop every such hit on the next scan.
+	 */
+	private static boolean sameValue(Object a, Object b) {
+		if (a instanceof Number && b instanceof Number) {
+			return compare(a, b) == 0;
+		}
+		return a != null && a.equals(b);
+	}
+
 	private static int compare(Object a, Object b) {
 		if (a instanceof Long && b instanceof Long) {
 			return Long.compare((Long) a, (Long) b);
@@ -175,6 +202,9 @@ public class MemoryScanner {
 	}
 
 	private ScanResult run(Object[] roots, List<String> classNames) {
+		if (instanceClass != null) {
+			dumpStaticFields(instanceClass);
+		}
 		for (String name : classNames) {
 			if (cancel.get() || visitLimited) {
 				break;
@@ -201,12 +231,6 @@ public class MemoryScanner {
 			}
 		}
 		drain();
-		for (Node node : deferredArrays) {
-			if (cancel.get() || visitLimited) {
-				break;
-			}
-			scanPrimitiveArray(node);
-		}
 		return new ScanResult(hits, totalHits, totalHits > hits.size(), visitedCount, visitLimited);
 	}
 
@@ -241,7 +265,11 @@ public class MemoryScanner {
 			if (!comp.isPrimitive()) {
 				return true;
 			}
-			// Reading a primitive array only pays off for its own element type.
+			// Reading a primitive array only pays off for its own element type. An instance listing
+			// reads the arrays of the listed objects directly, so it skips them here.
+			if (instanceClass != null) {
+				return false;
+			}
 			return type == ValueType.ANY || comp == type.getFieldClass();
 		}
 		return isAppClass(c) || c.getName().startsWith("java.util.");
@@ -279,7 +307,8 @@ public class MemoryScanner {
 		if (c.isArray()) {
 			Class<?> comp = c.getComponentType();
 			if (comp.isPrimitive()) {
-				deferredArrays.add(node);
+				// Scanned inline, so the visit cap can no longer drop every primitive array at once.
+				scanPrimitiveArray(node);
 				return;
 			}
 			Object[] arr = (Object[]) node.obj;
@@ -289,9 +318,13 @@ public class MemoryScanner {
 					continue;
 				}
 				checkArrayValue(arr, node.owner, node.member, i, e);
-				push(e, node.owner, node.member + "[]");
+				// Keep the outer index so rows of a 2D array stay distinguishable: attr[1][0].
+				push(e, node.owner, node.member + "[" + i + "]");
 			}
 			return;
+		}
+		if (instanceClass != null && instanceClass.isInstance(node.obj)) {
+			dumpInstance(node.obj);
 		}
 		for (Field f : instanceFieldsOf(c)) {
 			if (visitLimited) {
@@ -299,6 +332,80 @@ public class MemoryScanner {
 			}
 			processField(node.obj, f);
 		}
+	}
+
+	private void dumpStaticFields(Class<?> c) {
+		for (Field f : c.getDeclaredFields()) {
+			int mod = f.getModifiers();
+			if (Modifier.isStatic(mod) && !Modifier.isFinal(mod)) {
+				try {
+					f.setAccessible(true);
+					dumpField(null, f, 0);
+				} catch (Throwable ignored) {
+				}
+			}
+		}
+	}
+
+	private void dumpInstance(Object obj) {
+		int no = ++instanceCount;
+		for (Field f : instanceFieldsOf(obj.getClass())) {
+			if (isAppClass(f.getDeclaringClass())) {
+				dumpField(obj, f, no);
+			}
+		}
+	}
+
+	private void dumpField(Object holder, Field f, int no) {
+		Object value;
+		try {
+			value = f.get(holder);
+		} catch (Throwable t) {
+			return;
+		}
+		if (value == null) {
+			return;
+		}
+		Class<?> owner = f.getDeclaringClass();
+		ValueType vt = ValueType.forFieldClass(value.getClass());
+		if (vt != null) {
+			addInstanceHit(vt, holder, f, owner, f.getName(), -1, value, no);
+			return;
+		}
+		Class<?> vc = value.getClass();
+		if (!vc.isArray()) {
+			return;
+		}
+		Class<?> comp = vc.getComponentType();
+		if (comp.isPrimitive()) {
+			dumpPrimitiveArray(value, owner, f.getName(), no);
+		} else if (comp.isArray() && comp.getComponentType().isPrimitive()) {
+			Object[] rows = (Object[]) value;
+			for (int r = 0; r < rows.length; r++) {
+				if (rows[r] != null) {
+					dumpPrimitiveArray(rows[r], owner, f.getName() + "[" + r + "]", no);
+				}
+			}
+		}
+	}
+
+	private void dumpPrimitiveArray(Object arr, Class<?> owner, String member, int no) {
+		ValueType vt = ValueType.forFieldClass(arr.getClass().getComponentType());
+		if (vt == null) {
+			return;
+		}
+		int len = Array.getLength(arr);
+		for (int i = 0; i < len; i++) {
+			addInstanceHit(vt, arr, null, owner, member, i, Array.get(arr, i), no);
+		}
+	}
+
+	private void addInstanceHit(ValueType vt, Object target, Field field, Class<?> owner, String member,
+								int index, Object value, int no) {
+		MemoryHit hit = new MemoryHit(vt, target, field, owner, member, index, false);
+		hit.setInstanceNo(no);
+		hit.setLastValue(ValueType.normalize(value));
+		addHit(hit);
 	}
 
 	private Field[] instanceFieldsOf(Class<?> c) {
@@ -366,7 +473,8 @@ public class MemoryScanner {
 	/** Builds a hit when {@code value} matches the current search, or null when it does not. */
 	private MemoryHit valueHit(Object target, Field field, Class<?> owner, String member, int index,
 							   Object value) {
-		if (value == null) {
+		// An instance listing only reports fields of the requested class, see dumpInstance().
+		if (value == null || instanceClass != null) {
 			return null;
 		}
 		ValueType fieldType = ValueType.forFieldClass(value.getClass());
@@ -377,13 +485,18 @@ public class MemoryScanner {
 		if (!test(type, mode, cur, null, v1, v2)) {
 			return null;
 		}
-		MemoryHit hit = new MemoryHit(fieldType, target, field, owner, member, index, !isAppClass(owner));
+		// Writing an element of a primitive array never breaks a container, even when the array
+		// is reached through one (an int[] row stored in a Vector), so only fields and Object[]
+		// slots owned by java.util stay read-only.
+		boolean primitiveElement = field == null && target.getClass().getComponentType().isPrimitive();
+		boolean readOnly = !primitiveElement && !isAppClass(owner);
+		MemoryHit hit = new MemoryHit(fieldType, target, field, owner, member, index, readOnly);
 		hit.setLastValue(cur);
 		return hit;
 	}
 
 	private void scanPrimitiveArray(Node node) {
-		if (!isArrayValueSource(node.owner)) {
+		if (instanceClass != null || !isArrayValueSource(node.owner)) {
 			return;
 		}
 		Object arr = node.obj;

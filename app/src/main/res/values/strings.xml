@@ -311,6 +311,9 @@
     <string name="memory_search_unlock">Unlock</string>
     <string name="memory_search_read_only">Read-only</string>
     <string name="memory_search_write_failed">Write failed</string>
+    <string name="memory_search_list_instances">Show all %1$s objects</string>
+    <string name="memory_search_list_instances_unsupported">Not available for container internals</string>
+    <string name="memory_search_listing">[All %1$s objects]</string>
     <string-array name="memory_search_modes">
         <item>Equal</item>
         <item>Greater than</item>

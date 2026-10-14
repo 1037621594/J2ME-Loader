@@ -64,6 +64,8 @@ public class MemorySearchPanel {
 	private long totalHits;
 	private boolean gamePaused;
 	private ValueType scanType;
+	/** Simple name of the class whose instances are listed, null for a value search. */
+	private String listingClass;
 
 	private final Runnable refresh = new Runnable() {
 		@Override
@@ -144,6 +146,10 @@ public class MemorySearchPanel {
 		adapter = new HitAdapter();
 		list.setAdapter(adapter);
 		list.setOnItemClickListener((parent, view, position, id) -> showEditDialog(hits.get(position)));
+		list.setOnItemLongClickListener((parent, view, position, id) -> {
+			showHitMenu(hits.get(position));
+			return true;
+		});
 
 		panel.findViewById(R.id.memory_search_minimize).setOnClickListener(v -> minimize());
 		firstButton.setOnClickListener(v -> onFirstScan());
@@ -354,11 +360,62 @@ public class MemorySearchPanel {
 		hits.clear();
 		hits.addAll(result.getHits());
 		scanType = type;
+		// A next scan keeps filtering the listing, a first scan or listing sets it again.
+		if (result.getVisited() > 0) {
+			listingClass = null;
+		}
 		totalHits = result.getTotalHits();
 		truncated = result.isTruncated();
 		visitLimited = result.isVisitLimited();
 		adapter.notifyDataSetChanged();
 		updateStatus();
+	}
+
+	private void showHitMenu(MemoryHit hit) {
+		Class<?> cls = hit.getOwnerClass();
+		String name = cls.getName();
+		name = name.substring(name.lastIndexOf('.') + 1);
+		String[] items = {activity.getString(R.string.memory_search_list_instances, name)};
+		new AlertDialog.Builder(activity)
+				.setTitle(hit.label())
+				.setItems(items, (d, which) -> onListInstances(cls, name))
+				.show();
+	}
+
+	/** Replaces the results with every field of every reachable instance of {@code cls}. */
+	private void onListInstances(Class<?> cls, String displayName) {
+		if (scanning) {
+			return;
+		}
+		if (cls.getName().startsWith("java.")) {
+			// HashMap$Node & co. are container internals, listing them is noise.
+			toast(R.string.memory_search_list_instances_unsupported);
+			return;
+		}
+		MIDlet midlet = MidletThread.getMidlet();
+		if (midlet == null) {
+			toast(R.string.memory_search_not_running);
+			return;
+		}
+		Object[] roots = {midlet, activity.getCurrent()};
+		ClassLoader loader = midlet.getClass().getClassLoader();
+		String dexPath = AppClassLoader.getDexPath();
+		AtomicBoolean token = beginScan();
+		new Thread(() -> {
+			try {
+				List<String> names = MemoryScanner.listClassNames(dexPath);
+				ScanResult result = MemoryScanner.findInstances(loader, roots, names, cls, token);
+				activity.runOnUiThread(() -> {
+					finishScan(token, result, ValueType.ANY);
+					if (!destroyed && !token.get()) {
+						listingClass = displayName;
+						updateStatus();
+					}
+				});
+			} catch (Throwable t) {
+				activity.runOnUiThread(() -> failScan(token, t));
+			}
+		}, "MemorySearch").start();
 	}
 
 	private void failScan(AtomicBoolean token, Throwable t) {
@@ -376,6 +433,7 @@ public class MemorySearchPanel {
 		endScan();
 		hits.clear();
 		scanType = null;
+		listingClass = null;
 		totalHits = 0;
 		truncated = false;
 		visitLimited = false;
@@ -385,6 +443,9 @@ public class MemorySearchPanel {
 
 	private void updateStatus() {
 		String text = activity.getString(R.string.memory_search_status, hits.size(), lockManager.size());
+		if (listingClass != null) {
+			text = activity.getString(R.string.memory_search_listing, listingClass) + " " + text;
+		}
 		if (truncated) {
 			text += " " + activity.getString(R.string.memory_search_truncated, totalHits - hits.size());
 		}
