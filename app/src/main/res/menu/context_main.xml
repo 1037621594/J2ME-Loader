@@ -19,6 +19,9 @@
         android:id="@+id/action_context_restore_save"
         android:title="@string/restore_save" />
     <item
+        android:id="@+id/action_context_edit_save"
+        android:title="@string/save_editor" />
+    <item
         android:id="@+id/action_context_delete"
         android:title="@string/action_context_delete" />
 </menu>

@@ -142,6 +142,11 @@
             android:exported="false"
             android:theme="@style/FilePickerTheme" />
         <activity android:name=".config.ProfilesActivity" android:exported="false" />
+        <activity android:name=".saveeditor.SaveEditorActivity" android:exported="false" />
+        <activity
+            android:name=".saveeditor.RecordEditorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

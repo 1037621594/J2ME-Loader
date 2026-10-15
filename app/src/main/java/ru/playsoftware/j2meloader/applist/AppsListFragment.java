@@ -91,6 +91,7 @@ import ru.playsoftware.j2meloader.databinding.FragmentAppsListBinding;
 import ru.playsoftware.j2meloader.filepicker.FilteredFilePickerFragment;
 import ru.playsoftware.j2meloader.info.AboutDialogFragment;
 import ru.playsoftware.j2meloader.info.HelpDialogFragment;
+import ru.playsoftware.j2meloader.saveeditor.SaveEditorActivity;
 import ru.playsoftware.j2meloader.settings.SettingsActivity;
 import ru.playsoftware.j2meloader.util.AppUtils;
 import ru.playsoftware.j2meloader.util.Constants;
@@ -272,6 +273,12 @@ public class AppsListFragment extends ListFragment {
 			startAppBackupTask(appItem, false);
 		} else if (itemId == R.id.action_context_restore_save) {
 			startAppBackupTask(appItem, true);
+		} else if (itemId == R.id.action_context_edit_save) {
+			if (isMidletProcessRunning(requireActivity())) {
+				Toast.makeText(requireActivity(), R.string.save_editor_midlet_running, Toast.LENGTH_LONG).show();
+			} else {
+				SaveEditorActivity.start(requireActivity(), appItem.getPathExt(), appItem.getTitle());
+			}
 		} else if (itemId == R.id.action_context_delete) {
 			alertDelete(appItem);
 		} else {

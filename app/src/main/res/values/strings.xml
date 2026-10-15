@@ -311,6 +311,38 @@
     <string name="memory_search_unlock">Unlock</string>
     <string name="memory_search_read_only">Read-only</string>
     <string name="memory_search_write_failed">Write failed</string>
+    <string name="save_editor">Edit save</string>
+    <string name="save_editor_title">Save: %1$s</string>
+    <string name="save_editor_empty">No save records</string>
+    <string name="save_editor_record">%1$s  #%2$d  (%3$d bytes)</string>
+    <string name="save_editor_midlet_running">A game is running. Exit it before editing saves.</string>
+    <string name="save_editor_info">Store: %1$s, record: %2$d, size: %3$d bytes</string>
+    <string name="save_editor_unsaved">(unsaved)</string>
+    <string name="save_editor_find">Find</string>
+    <string name="save_editor_filter">Filter</string>
+    <string name="save_editor_goto">Go</string>
+    <string name="save_editor_offset_hint">Offset (e.g. 16 or 0x10)</string>
+    <string name="save_editor_found">Found: %1$d</string>
+    <string name="save_editor_offset_out_of_range">Offset out of range</string>
+    <string name="save_editor_text_length">Text must stay %1$d bytes long</string>
+    <string name="save_editor_save">Save</string>
+    <string name="save_editor_discard">Discard</string>
+    <string name="save_editor_saved">Saved</string>
+    <string name="save_editor_save_failed">Save failed: %1$s</string>
+    <string name="save_editor_load_failed">Can\'t read record: %1$s</string>
+    <string name="save_editor_hex">Hex view</string>
+    <string name="save_editor_restore">Restore original</string>
+    <string name="save_editor_no_backup">No original backup, the record was never edited</string>
+    <string name="save_editor_restore_confirm">Replace the record with its state before the first edit?</string>
+    <string name="save_editor_unsaved_confirm">Save the changes?</string>
+    <string-array name="save_editor_types">
+        <item>Int (4 bytes, big-endian)</item>
+        <item>Short (2 bytes, big-endian)</item>
+        <item>Byte</item>
+        <item>Int (4 bytes, little-endian)</item>
+        <item>Short (2 bytes, little-endian)</item>
+        <item>Text (UTF-8)</item>
+    </string-array>
     <string name="memory_search_list_instances">Show all %1$s objects</string>
     <string name="memory_search_list_instances_unsupported">Not available for container internals</string>
     <string name="memory_search_listing">[All %1$s objects]</string>

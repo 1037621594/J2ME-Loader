@@ -256,6 +256,38 @@
     <string name="memory_search_unlock">解锁</string>
     <string name="memory_search_read_only">只读</string>
     <string name="memory_search_write_failed">写入失败</string>
+    <string name="save_editor">修改存档</string>
+    <string name="save_editor_title">存档：%1$s</string>
+    <string name="save_editor_empty">没有存档记录</string>
+    <string name="save_editor_record">%1$s  #%2$d  （%3$d 字节）</string>
+    <string name="save_editor_midlet_running">有游戏正在运行，请先退出游戏再修改存档。</string>
+    <string name="save_editor_info">存储：%1$s，记录：%2$d，大小：%3$d 字节</string>
+    <string name="save_editor_unsaved">（未保存）</string>
+    <string name="save_editor_find">查找</string>
+    <string name="save_editor_filter">筛选</string>
+    <string name="save_editor_goto">跳转</string>
+    <string name="save_editor_offset_hint">偏移（如 16 或 0x10）</string>
+    <string name="save_editor_found">找到：%1$d</string>
+    <string name="save_editor_offset_out_of_range">偏移超出范围</string>
+    <string name="save_editor_text_length">文本必须保持 %1$d 字节长度</string>
+    <string name="save_editor_save">保存</string>
+    <string name="save_editor_discard">放弃</string>
+    <string name="save_editor_saved">已保存</string>
+    <string name="save_editor_save_failed">保存失败：%1$s</string>
+    <string name="save_editor_load_failed">无法读取记录：%1$s</string>
+    <string name="save_editor_hex">十六进制查看</string>
+    <string name="save_editor_restore">还原原始存档</string>
+    <string name="save_editor_no_backup">没有原始备份，该记录还未修改过</string>
+    <string name="save_editor_restore_confirm">将该记录还原为第一次修改前的状态？</string>
+    <string name="save_editor_unsaved_confirm">是否保存修改？</string>
+    <string-array name="save_editor_types">
+        <item>Int（4 字节，大端）</item>
+        <item>Short（2 字节，大端）</item>
+        <item>Byte</item>
+        <item>Int（4 字节，小端）</item>
+        <item>Short（2 字节，小端）</item>
+        <item>文本（UTF-8）</item>
+    </string-array>
     <string name="memory_search_list_instances">显示 %1$s 的所有对象</string>
     <string name="memory_search_list_instances_unsupported">容器内部类不支持显示对象</string>
     <string name="memory_search_listing">[%1$s 所有对象]</string>
