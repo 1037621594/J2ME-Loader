@@ -19,6 +19,8 @@ public enum ValueCodec {
 	INT8(1, true),
 	INT32_LE(4, false),
 	INT16_LE(2, false),
+	INT64_BE(8, true),
+	INT64_LE(8, false),
 	TEXT(0, true);
 
 	private static final Charset UTF8 = Charset.forName("UTF-8");
@@ -40,9 +42,7 @@ public enum ValueCodec {
 			return bytes;
 		}
 		long v = Long.parseLong(text.trim());
-		long min = -(1L << (size * 8 - 1));
-		long max = (1L << (size * 8)) - 1;
-		if (v < min || v > max) {
+		if (size < 8 && (v < -(1L << (size * 8 - 1)) || v > (1L << (size * 8)) - 1)) {
 			throw new NumberFormatException(text);
 		}
 		byte[] out = new byte[size];

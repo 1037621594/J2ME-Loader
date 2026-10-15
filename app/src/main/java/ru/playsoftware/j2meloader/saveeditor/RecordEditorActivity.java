@@ -36,17 +36,19 @@ import ru.playsoftware.j2meloader.R;
 import ru.playsoftware.j2meloader.base.BaseActivity;
 
 /**
- * Edits one RMS record. Works like a memory search on the record bytes: find the current value,
- * change it in game, filter the offsets with the new value, then edit the one that is left.
+ * Edits one RMS record. It opens with every value of the record parsed out (see
+ * {@link RmsParser}); find/filter/go to offset narrow it down like a memory search.
  * Edits stay in memory until saved; the first save keeps the original as {@code .rsr.bak}.
  */
 public class RecordEditorActivity extends BaseActivity {
 	private static final String EXTRA_FILE = "file";
+	private static final String EXTRA_OFFSET = "offset";
 	/** Values shown by "go to offset". */
 	private static final int GOTO_COUNT = 64;
 	private static final int MAX_ROWS = 2000;
 
-	private final List<Integer> offsets = new ArrayList<>();
+	/** The values listed, each with its own type; parsed fields mix ints and text. */
+	private final List<RmsField> fields = new ArrayList<>();
 	private final List<String> rows = new ArrayList<>();
 	private ArrayAdapter<String> adapter;
 	private Spinner typeSpinner;
@@ -54,18 +56,21 @@ public class RecordEditorActivity extends BaseActivity {
 	private EditText offsetInput;
 	private TextView info;
 	private TextView status;
+	private String[] typeNames;
 
 	private File file;
 	private RmsRecord record;
 	private boolean dirty;
 	/** Modification time of the file when it was last loaded or saved. */
 	private long lastLoaded;
-	/** Byte length of the last text search, used to show text values. */
-	private int textLength;
+	/** True while the parsed view is shown, so a reload parses again. */
+	private boolean parsedView;
 
-	public static void start(Context context, String filePath) {
+	/** @param offset offset to show first, or -1 to show all parsed values */
+	public static void start(Context context, String filePath, int offset) {
 		Intent intent = new Intent(context, RecordEditorActivity.class);
 		intent.putExtra(EXTRA_FILE, filePath);
+		intent.putExtra(EXTRA_OFFSET, offset);
 		context.startActivity(intent);
 	}
 
@@ -87,14 +92,13 @@ public class RecordEditorActivity extends BaseActivity {
 		offsetInput = findViewById(R.id.record_editor_offset);
 		ListView list = findViewById(R.id.record_editor_list);
 
-		typeSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
-				getResources().getStringArray(R.array.save_editor_types)));
+		typeNames = getResources().getStringArray(R.array.save_editor_types);
+		typeSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, typeNames));
 		typeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
 			@Override
 			public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
 				valueInput.setInputType(selectedCodec() == ValueCodec.TEXT ? InputType.TYPE_CLASS_TEXT
 						: InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED);
-				refreshRows();
 			}
 
 			@Override
@@ -104,7 +108,7 @@ public class RecordEditorActivity extends BaseActivity {
 
 		adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, rows);
 		list.setAdapter(adapter);
-		list.setOnItemClickListener((parent, view, position, id) -> showEditDialog(offsets.get(position)));
+		list.setOnItemClickListener((parent, view, position, id) -> showEditDialog(fields.get(position)));
 
 		findViewById(R.id.record_editor_find).setOnClickListener(v -> onFind(false));
 		findViewById(R.id.record_editor_filter).setOnClickListener(v -> onFind(true));
@@ -117,6 +121,16 @@ public class RecordEditorActivity extends BaseActivity {
 			}
 		});
 		load();
+		if (record == null) {
+			return;
+		}
+		int offset = getIntent().getIntExtra(EXTRA_OFFSET, -1);
+		if (offset >= 0) {
+			offsetInput.setText(String.valueOf(offset));
+			gotoOffset(offset);
+		} else {
+			showParsed();
+		}
 	}
 
 	@Override
@@ -125,7 +139,11 @@ public class RecordEditorActivity extends BaseActivity {
 		// Pick up changes the game wrote meanwhile, unless there are unsaved edits.
 		if (!dirty && record != null && file.lastModified() != lastLoaded) {
 			load();
-			refreshRows();
+			if (parsedView) {
+				showParsed();
+			} else {
+				refreshRows();
+			}
 		}
 	}
 
@@ -136,6 +154,7 @@ public class RecordEditorActivity extends BaseActivity {
 			dirty = false;
 			updateInfo();
 		} catch (IOException e) {
+			record = null;
 			Toast.makeText(this, getString(R.string.save_editor_load_failed, String.valueOf(e)),
 					Toast.LENGTH_LONG).show();
 			finish();
@@ -144,6 +163,16 @@ public class RecordEditorActivity extends BaseActivity {
 
 	private ValueCodec selectedCodec() {
 		return ValueCodec.values()[typeSpinner.getSelectedItemPosition()];
+	}
+
+	/** Lists every value of the record as parsed by {@link RmsParser}. */
+	private void showParsed() {
+		fields.clear();
+		List<RmsField> parsed = RmsParser.parse(record.getData());
+		fields.addAll(parsed.subList(0, Math.min(parsed.size(), MAX_ROWS)));
+		parsedView = true;
+		refreshRows();
+		status.setText(getString(R.string.save_editor_parsed, parsed.size()));
 	}
 
 	/** Find lists every offset holding the value; filter keeps only the listed ones that do. */
@@ -159,19 +188,31 @@ public class RecordEditorActivity extends BaseActivity {
 			Toast.makeText(this, R.string.memory_search_invalid_value, Toast.LENGTH_SHORT).show();
 			return;
 		}
-		if (filter && offsets.isEmpty()) {
+		if (filter && fields.isEmpty()) {
 			Toast.makeText(this, R.string.memory_search_need_results, Toast.LENGTH_SHORT).show();
 			return;
 		}
-		textLength = pattern.length;
 		List<Integer> found = ValueCodec.find(record.getData(), pattern);
-		if (filter) {
-			found.retainAll(offsets);
+		List<RmsField> result = new ArrayList<>();
+		for (int off : found) {
+			if (!filter || containsOffset(off)) {
+				result.add(new RmsField(off, codec, pattern.length));
+			}
 		}
-		offsets.clear();
-		offsets.addAll(found.subList(0, Math.min(found.size(), MAX_ROWS)));
+		fields.clear();
+		fields.addAll(result.subList(0, Math.min(result.size(), MAX_ROWS)));
+		parsedView = false;
 		refreshRows();
-		status.setText(getString(R.string.save_editor_found, found.size()));
+		status.setText(getString(R.string.save_editor_found, result.size()));
+	}
+
+	private boolean containsOffset(int offset) {
+		for (RmsField f : fields) {
+			if (f.getOffset() == offset) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Lists consecutive values of the selected type from the given offset (decimal or 0x hex). */
@@ -187,17 +228,26 @@ public class RecordEditorActivity extends BaseActivity {
 			Toast.makeText(this, R.string.memory_search_invalid_value, Toast.LENGTH_SHORT).show();
 			return;
 		}
+		gotoOffset(start);
+	}
+
+	private void gotoOffset(int start) {
 		int length = record.getData().length;
 		if (start < 0 || start >= length) {
 			Toast.makeText(this, R.string.save_editor_offset_out_of_range, Toast.LENGTH_SHORT).show();
 			return;
 		}
 		ValueCodec codec = selectedCodec();
-		int step = codec == ValueCodec.TEXT ? Math.max(textLength, 1) : codec.getSize();
-		offsets.clear();
-		for (int i = 0, off = start; i < GOTO_COUNT && off < length; i++, off += step) {
-			offsets.add(off);
+		if (codec == ValueCodec.TEXT) {
+			// Text has no fixed width, so step over the bytes as Int like the parser does.
+			codec = ValueCodec.INT32_BE;
 		}
+		int step = codec.getSize();
+		fields.clear();
+		for (int i = 0, off = start; i < GOTO_COUNT && off < length; i++, off += step) {
+			fields.add(new RmsField(off, codec, step));
+		}
+		parsedView = false;
 		refreshRows();
 		status.setText(null);
 	}
@@ -206,18 +256,57 @@ public class RecordEditorActivity extends BaseActivity {
 		if (record == null) {
 			return;
 		}
-		ValueCodec codec = selectedCodec();
+		byte[] data = record.getData();
 		rows.clear();
-		for (int off : offsets) {
-			String value = codec.decode(record.getData(), off, Math.max(textLength, 1));
-			rows.add(String.format(Locale.ROOT, "0x%04X (%d):  %s", off, off, value == null ? "?" : value));
+		for (RmsField f : fields) {
+			String value = f.getCodec().decode(data, f.getOffset(), f.getLength());
+			StringBuilder sb = new StringBuilder(String.format(Locale.ROOT, "0x%04X  %s = %s", f.getOffset(),
+					typeNames[f.getCodec().ordinal()], value == null ? "?" : value));
+			if (f.getCodec() == ValueCodec.INT32_BE && value != null) {
+				// The same 4 bytes read as 2 shorts and 4 bytes, for games that do not write ints.
+				sb.append(String.format(Locale.ROOT, "\n    short: %s, %s   byte: %d %d %d %d",
+						ValueCodec.INT16_BE.decode(data, f.getOffset(), 2),
+						ValueCodec.INT16_BE.decode(data, f.getOffset() + 2, 2),
+						data[f.getOffset()] & 0xFF, data[f.getOffset() + 1] & 0xFF,
+						data[f.getOffset() + 2] & 0xFF, data[f.getOffset() + 3] & 0xFF));
+			}
+			rows.add(sb.toString());
 		}
 		adapter.notifyDataSetChanged();
 	}
 
-	private void showEditDialog(int offset) {
-		ValueCodec codec = selectedCodec();
-		String current = codec.decode(record.getData(), offset, Math.max(textLength, 1));
+	private void showEditDialog(RmsField field) {
+		if (field.getCodec() != ValueCodec.INT32_BE) {
+			showValueDialog(field.getOffset(), field.getCodec(), field.getLength());
+			return;
+		}
+		// An int may really be shorts or bytes, let the user pick how to edit it.
+		int off = field.getOffset();
+		String[] items = {
+				typeNames[ValueCodec.INT32_BE.ordinal()],
+				String.format(Locale.ROOT, "%s @0x%04X", typeNames[ValueCodec.INT16_BE.ordinal()], off),
+				String.format(Locale.ROOT, "%s @0x%04X", typeNames[ValueCodec.INT16_BE.ordinal()], off + 2),
+				String.format(Locale.ROOT, "%s @0x%04X", typeNames[ValueCodec.INT8.ordinal()], off),
+				String.format(Locale.ROOT, "%s @0x%04X", typeNames[ValueCodec.INT8.ordinal()], off + 1),
+				String.format(Locale.ROOT, "%s @0x%04X", typeNames[ValueCodec.INT8.ordinal()], off + 2),
+				String.format(Locale.ROOT, "%s @0x%04X", typeNames[ValueCodec.INT8.ordinal()], off + 3),
+		};
+		new AlertDialog.Builder(this)
+				.setTitle(String.format(Locale.ROOT, "0x%04X", off))
+				.setItems(items, (d, which) -> {
+					if (which == 0) {
+						showValueDialog(off, ValueCodec.INT32_BE, 4);
+					} else if (which <= 2) {
+						showValueDialog(off + (which - 1) * 2, ValueCodec.INT16_BE, 2);
+					} else {
+						showValueDialog(off + which - 3, ValueCodec.INT8, 1);
+					}
+				})
+				.show();
+	}
+
+	private void showValueDialog(int offset, ValueCodec codec, int length) {
+		String current = codec.decode(record.getData(), offset, length);
 		if (current == null) {
 			Toast.makeText(this, R.string.save_editor_offset_out_of_range, Toast.LENGTH_SHORT).show();
 			return;
@@ -229,15 +318,15 @@ public class RecordEditorActivity extends BaseActivity {
 		input.setText(current);
 		input.setSelectAllOnFocus(true);
 		new AlertDialog.Builder(this)
-				.setTitle(String.format(Locale.ROOT, "0x%04X", offset))
+				.setTitle(String.format(Locale.ROOT, "0x%04X  %s", offset, typeNames[codec.ordinal()]))
 				.setView(input)
-				.setPositiveButton(R.string.memory_search_write, (d, w) -> applyValue(offset, codec,
+				.setPositiveButton(R.string.memory_search_write, (d, w) -> applyValue(offset, codec, length,
 						input.getText().toString()))
 				.setNegativeButton(android.R.string.cancel, null)
 				.show();
 	}
 
-	private void applyValue(int offset, ValueCodec codec, String text) {
+	private void applyValue(int offset, ValueCodec codec, int length, String text) {
 		byte[] bytes;
 		try {
 			bytes = codec.encode(text);
@@ -246,8 +335,8 @@ public class RecordEditorActivity extends BaseActivity {
 			return;
 		}
 		// Text must keep its byte length: a length prefix or the following fields would shift.
-		if (codec == ValueCodec.TEXT && bytes.length != textLength) {
-			Toast.makeText(this, getString(R.string.save_editor_text_length, textLength),
+		if (codec == ValueCodec.TEXT && bytes.length != length) {
+			Toast.makeText(this, getString(R.string.save_editor_text_length, length),
 					Toast.LENGTH_LONG).show();
 			return;
 		}
@@ -308,7 +397,7 @@ public class RecordEditorActivity extends BaseActivity {
 					try {
 						copy(backup, file);
 						load();
-						refreshRows();
+						showParsed();
 						Toast.makeText(this, R.string.restore_done, Toast.LENGTH_SHORT).show();
 					} catch (IOException e) {
 						Toast.makeText(this, getString(R.string.save_editor_save_failed, String.valueOf(e)),
@@ -379,6 +468,9 @@ public class RecordEditorActivity extends BaseActivity {
 			return true;
 		} else if (id == R.id.action_record_save) {
 			save();
+			return true;
+		} else if (id == R.id.action_record_parse) {
+			showParsed();
 			return true;
 		} else if (id == R.id.action_record_hex) {
 			showHexDump();

@@ -280,12 +280,18 @@
     <string name="save_editor_no_backup">没有原始备份，该记录还未修改过</string>
     <string name="save_editor_restore_confirm">将该记录还原为第一次修改前的状态？</string>
     <string name="save_editor_unsaved_confirm">是否保存修改？</string>
+    <string name="save_editor_parse">显示所有数值</string>
+    <string name="save_editor_parsed">解析出 %1$d 个数值（Int 同时按 Short 和 Byte 显示）</string>
+    <string name="save_editor_records">记录：%1$d。搜索会查找所有记录和所有类型。</string>
+    <string name="save_editor_search_hint">要查找的数值</string>
     <string-array name="save_editor_types">
         <item>Int（4 字节，大端）</item>
         <item>Short（2 字节，大端）</item>
         <item>Byte</item>
         <item>Int（4 字节，小端）</item>
         <item>Short（2 字节，小端）</item>
+        <item>Long（8 字节，大端）</item>
+        <item>Long（8 字节，小端）</item>
         <item>文本（UTF-8）</item>
     </string-array>
     <string name="memory_search_list_instances">显示 %1$s 的所有对象</string>

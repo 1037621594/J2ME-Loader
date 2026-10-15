@@ -7,6 +7,9 @@
         android:title="@string/save_editor_save"
         app:showAsAction="always" />
     <item
+        android:id="@+id/action_record_parse"
+        android:title="@string/save_editor_parse" />
+    <item
         android:id="@+id/action_record_hex"
         android:title="@string/save_editor_hex" />
     <item

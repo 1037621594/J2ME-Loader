@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/save_editor_value"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="@string/save_editor_search_hint"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1" />
+
+        <Button
+            android:id="@+id/save_editor_search"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/save_editor_find" />
+
+        <Button
+            android:id="@+id/save_editor_filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/save_editor_filter" />
+
+        <Button
+            android:id="@+id/save_editor_clear"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/memory_search_reset" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/save_editor_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp" />
+
+    <ListView
+        android:id="@+id/list_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:id="@+id/empty_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="10dp"
+        android:text="@string/save_editor_empty"
+        android:textSize="18sp" />
+</LinearLayout>

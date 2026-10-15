@@ -335,12 +335,18 @@
     <string name="save_editor_no_backup">No original backup, the record was never edited</string>
     <string name="save_editor_restore_confirm">Replace the record with its state before the first edit?</string>
     <string name="save_editor_unsaved_confirm">Save the changes?</string>
+    <string name="save_editor_parse">Show all values</string>
+    <string name="save_editor_parsed">Parsed values: %1$d (ints are also shown as shorts and bytes)</string>
+    <string name="save_editor_records">Records: %1$d. Search looks in all records and all types.</string>
+    <string name="save_editor_search_hint">Value to find</string>
     <string-array name="save_editor_types">
         <item>Int (4 bytes, big-endian)</item>
         <item>Short (2 bytes, big-endian)</item>
         <item>Byte</item>
         <item>Int (4 bytes, little-endian)</item>
         <item>Short (2 bytes, little-endian)</item>
+        <item>Long (8 bytes, big-endian)</item>
+        <item>Long (8 bytes, little-endian)</item>
         <item>Text (UTF-8)</item>
     </string-array>
     <string name="memory_search_list_instances">Show all %1$s objects</string>
