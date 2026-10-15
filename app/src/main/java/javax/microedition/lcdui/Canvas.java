@@ -30,6 +30,7 @@ import android.graphics.RectF;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.opengl.GLUtils;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
@@ -555,6 +556,12 @@ public abstract class Canvas extends Displayable {
 			innerView.setOnTouchListener(callback);
 			innerView.setOnKeyListener(callback);
 			innerView.setFocusableInTouchMode(true);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+				// Android 8+ draws a translucent gray "focus highlight" over a focused view without a
+				// focus state once the window leaves touch mode (e.g. after typing in the memory search
+				// panel), which dims the whole game screen.
+				innerView.setDefaultFocusHighlightEnabled(false);
+			}
 			layout.addView(innerView);
 			innerView.requestFocus();
 		}

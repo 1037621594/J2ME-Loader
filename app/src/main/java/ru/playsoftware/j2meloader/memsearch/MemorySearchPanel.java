@@ -193,6 +193,8 @@ public class MemorySearchPanel {
 		if (imm != null) {
 			imm.hideSoftInputFromWindow(panel.getWindowToken(), 0);
 		}
+		// Drop focus from the panel's inputs before hiding it, so it goes back to the game view.
+		panel.clearFocus();
 		panel.setVisibility(View.GONE);
 		panel.setAlpha(1f);
 		panel.setTranslationZ(0f);
