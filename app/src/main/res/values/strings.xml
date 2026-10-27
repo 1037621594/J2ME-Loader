@@ -376,4 +376,10 @@
     <string name="qiniu_local_saved_upload_failed">Local backup saved, but Qiniu upload failed. Check the endpoint, credentials and network, then retry from the sync menu.</string>
     <string name="qiniu_sync_result">Qiniu /java-save sync: uploaded %1$d, failed %2$d</string>
     <string name="qiniu_sync_failed">Cloud sync failed. Check storage access, configuration and network.</string>
+    <string name="view_log">View logs</string>
+    <string name="copy_log">Copy all</string>
+    <string name="refresh_log">Refresh</string>
+    <string name="loading_log">Loading logs…</string>
+    <string name="load_log_failed">Unable to load logs. Tap Refresh to retry.</string>
+    <string name="log_copied">Logs copied</string>
 </resources>

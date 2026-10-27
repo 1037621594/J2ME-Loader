@@ -7,6 +7,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -23,6 +24,8 @@ import java.util.zip.ZipOutputStream;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+import ru.playsoftware.j2meloader.util.LogUtils;
+
 /**
  * Uploads complete backup snapshots to public or private Qiniu buckets.
  * Both use the same signed upload token; bucket visibility only affects downloads.
@@ -38,6 +41,18 @@ public final class QiniuBackupClient {
 	}
 
 	public void upload(File folder) throws IOException {
+		LogUtils.diagnostic(context, "Qiniu upload start: endpoint=" + config.getUploadUrl()
+				+ ", bucket=" + config.getBucket() + ", key=java-save/" + folder.getName() + ".zip", null);
+		try {
+			uploadSnapshot(folder);
+			LogUtils.diagnostic(context, "Qiniu upload succeeded: " + folder.getName(), null);
+		} catch (IOException | RuntimeException e) {
+			LogUtils.diagnostic(context, "Qiniu upload failed: " + folder.getName(), e);
+			throw e;
+		}
+	}
+
+	private void uploadSnapshot(File folder) throws IOException {
 		if (!config.isValid()) {
 			throw new IOException("Invalid Qiniu configuration");
 		}
@@ -79,6 +94,7 @@ public final class QiniuBackupClient {
 				failed++;
 			}
 		}
+		LogUtils.diagnostic(context, "Qiniu sync finished: success=" + success + ", failed=" + failed, null);
 		return new BackupSummary(success, 0, failed);
 	}
 
@@ -109,6 +125,7 @@ public final class QiniuBackupClient {
 				+ "Content-Type: application/zip\r\n\r\n").getBytes("UTF-8");
 		byte[] ending = ("\r\n--" + boundary + "--\r\n").getBytes("UTF-8");
 		long length = archive.length() + tokenField.length + keyField.length + fileHeader.length + ending.length;
+		LogUtils.diagnostic(context, "Qiniu archive bytes=" + archive.length() + ", request bytes=" + length, null);
 		if (length > Integer.MAX_VALUE) {
 			throw new IOException("Backup is too large for form upload");
 		}
@@ -131,8 +148,26 @@ public final class QiniuBackupClient {
 				out.write(ending);
 			}
 			int status = connection.getResponseCode();
+			LogUtils.diagnostic(context, "Qiniu response: HTTP " + status
+					+ ", requestId=" + connection.getHeaderField("X-Reqid")
+					+ ", contentType=" + connection.getContentType()
+					+ ", server=" + connection.getHeaderField("Server")
+					+ ", location=" + connection.getHeaderField("Location"), null);
 			if (status != HttpURLConnection.HTTP_OK) {
-				// Do not include the request or token in errors or logs.
+				try (InputStream in = connection.getErrorStream()) {
+					if (in != null) {
+						ByteArrayOutputStream response = new ByteArrayOutputStream();
+						byte[] buffer = new byte[1024];
+						int count;
+						while (response.size() < 8192 && (count = in.read(buffer, 0,
+								Math.min(buffer.length, 8192 - response.size()))) != -1) {
+							response.write(buffer, 0, count);
+						}
+						LogUtils.diagnostic(context, "Qiniu error response (up to 8 KiB): " + response.toString("UTF-8"), null);
+					}
+				} catch (IOException e) {
+					LogUtils.diagnostic(context, "Cannot read Qiniu error response", e);
+				}
 				throw new IOException("Qiniu upload failed (HTTP " + status + ")");
 			}
 			try (InputStream in = connection.getInputStream()) {

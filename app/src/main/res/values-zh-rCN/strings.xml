@@ -321,4 +321,10 @@
     <string name="qiniu_local_saved_upload_failed">本地备份已保存，七牛云上传失败。请检查上传域名、密钥和网络，再通过同步菜单重试。</string>
     <string name="qiniu_sync_result">七牛云 /java-save 同步完成：成功 %1$d，失败 %2$d</string>
     <string name="qiniu_sync_failed">云端同步失败，请检查存储权限、配置及网络。</string>
+    <string name="view_log">查看日志</string>
+    <string name="copy_log">复制全部</string>
+    <string name="refresh_log">刷新</string>
+    <string name="loading_log">正在读取日志…</string>
+    <string name="load_log_failed">日志读取失败，请点击刷新重试。</string>
+    <string name="log_copied">日志已复制</string>
 </resources>

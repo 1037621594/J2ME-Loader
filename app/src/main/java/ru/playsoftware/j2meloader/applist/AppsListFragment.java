@@ -100,6 +100,7 @@ import ru.playsoftware.j2meloader.util.AppUtils;
 import ru.playsoftware.j2meloader.util.Constants;
 import ru.playsoftware.j2meloader.util.FileUtils;
 import ru.playsoftware.j2meloader.util.LogUtils;
+import ru.playsoftware.j2meloader.util.LogViewerDialog;
 import ru.woesss.j2me.installer.InstallerDialog;
 
 public class AppsListFragment extends ListFragment {
@@ -461,6 +462,8 @@ public class AppsListFragment extends ListFragment {
 		} else if (itemId == R.id.action_help) {
 			HelpDialogFragment helpDialogFragment = new HelpDialogFragment();
 			helpDialogFragment.show(getChildFragmentManager(), "help");
+		} else if (itemId == R.id.action_view_log) {
+			LogViewerDialog.show(activity);
 		} else if (itemId == R.id.action_save_log) {
 			try {
 				LogUtils.writeLog();
@@ -543,6 +546,8 @@ public class AppsListFragment extends ListFragment {
 		FragmentActivity activity = requireActivity();
 		QiniuBackupConfig config = QiniuBackupConfig.load(activity);
 		if (!config.isEnabled() || !config.isValid()) {
+			LogUtils.diagnostic(activity, "Qiniu sync blocked: enabled=" + config.isEnabled()
+					+ ", validConfig=" + config.isValid(), null);
 			Toast.makeText(activity, R.string.qiniu_configure_first, Toast.LENGTH_LONG).show();
 			QiniuBackupDialog.show(activity);
 			return;
@@ -563,6 +568,7 @@ public class AppsListFragment extends ListFragment {
 							.setPositiveButton(android.R.string.ok, null).show();
 				}, error -> {
 					progress.dismiss();
+					LogUtils.diagnostic(activity, "Qiniu sync task failed", error);
 					Toast.makeText(activity, R.string.qiniu_sync_failed, Toast.LENGTH_LONG).show();
 				});
 	}
