@@ -145,4 +145,22 @@
     <string name="loading_log">正在讀取日誌…</string>
     <string name="load_log_failed">日誌讀取失敗，請重新整理後再試。</string>
     <string name="log_copied">日誌已複製</string>
+    <string name="qiniu_download_url">下載網域（HTTP/HTTPS）</string>
+    <string name="qiniu_list_url">檔案列表介面網域（HTTP/HTTPS）</string>
+    <string name="qiniu_restore_help">雲端還原需填寫該空間的下載網域，例如 http://你的網域.clouddn.com。下載網域與上傳網域分開設定。檔案列表介面使用空間所在地區的列舉網域，預設 https://rsf.qiniuapi.com。下載統一使用簽署連結，支援公開和私有空間。還原不需要開啟自動上傳。</string>
+    <string name="qiniu_restore">從七牛雲還原</string>
+    <string name="qiniu_restore_config_required">請填寫空間名稱、AccessKey、SecretKey、下載網域和檔案列表介面網域。兩個網域均需為有效的 HTTP/HTTPS 位址，不能包含路徑。</string>
+    <string name="qiniu_loading_backups">正在讀取七牛雲 /java-save 備份列表…</string>
+    <string name="qiniu_no_backups">七牛雲 /java-save 下找不到 ZIP 備份。</string>
+    <string name="qiniu_select_backup">請至少選擇一個備份。</string>
+    <string name="qiniu_restore_confirm">確定還原選取的 %1$d 個雲端備份？現有存檔和設定將被覆蓋，覆蓋前會將目前存檔備份到 JavaGame/Save。本機未安裝的遊戲，備份含遊戲本體時會安裝，否則略過。請先退出所有遊戲。</string>
+    <string name="qiniu_restore_result">雲端還原完成。成功：%1$d，略過（本機未安裝且備份無遊戲本體）：%2$d，失敗：%3$d。失敗詳情可在日誌中查看。</string>
+    <string name="qiniu_restore_failed">雲端還原失敗，請開啟「查看日誌」取得詳情。</string>
+    <string name="qiniu_transfer_help">複製目前填寫的設定，可移轉到另一台手機。匯出內容包含 AccessKey 和 SecretKey，請妥善保管。匯入後點選「確定」儲存。</string>
+    <string name="qiniu_export_config">一鍵複製設定到剪貼簿</string>
+    <string name="qiniu_import_config">從剪貼簿匯入設定</string>
+    <string name="qiniu_config_copied">設定已複製，包含金鑰，請勿公開分享。</string>
+    <string name="qiniu_config_copy_failed">複製設定失敗。</string>
+    <string name="qiniu_config_imported">設定已填入，點選「確定」儲存。</string>
+    <string name="qiniu_config_import_failed">剪貼簿中沒有有效的設定，或設定格式不受支援。</string>
 </resources>

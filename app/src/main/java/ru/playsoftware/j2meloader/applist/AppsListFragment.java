@@ -72,6 +72,7 @@ import androidx.preference.PreferenceManager;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
 import io.reactivex.Observable;
@@ -85,6 +86,8 @@ import ru.playsoftware.j2meloader.backup.BackupManager;
 import ru.playsoftware.j2meloader.backup.QiniuBackupClient;
 import ru.playsoftware.j2meloader.backup.QiniuBackupConfig;
 import ru.playsoftware.j2meloader.backup.QiniuBackupDialog;
+import ru.playsoftware.j2meloader.backup.QiniuBackupEntry;
+import ru.playsoftware.j2meloader.backup.QiniuRestoreClient;
 import ru.playsoftware.j2meloader.backup.StoragePermission;
 import ru.playsoftware.j2meloader.appsdb.AppRepository;
 import ru.playsoftware.j2meloader.config.Config;
@@ -480,6 +483,8 @@ public class AppsListFragment extends ListFragment {
 			QiniuBackupDialog.show(activity);
 		} else if (itemId == R.id.action_qiniu_sync) {
 			startQiniuSync();
+		} else if (itemId == R.id.action_qiniu_restore) {
+			startQiniuRestore();
 		} else if (itemId == R.id.action_exit_app) {
 			activity.finish();
 		} else if (itemId == R.id.action_sort) {
@@ -570,6 +575,113 @@ public class AppsListFragment extends ListFragment {
 					progress.dismiss();
 					LogUtils.diagnostic(activity, "Qiniu sync task failed", error);
 					Toast.makeText(activity, R.string.qiniu_sync_failed, Toast.LENGTH_LONG).show();
+				});
+	}
+
+	private boolean canRestoreFromCloud(FragmentActivity activity) {
+		if (!StoragePermission.hasAccess(activity)) {
+			Toast.makeText(activity, R.string.backup_need_permission, Toast.LENGTH_LONG).show();
+			StoragePermission.request(activity);
+			return false;
+		}
+		if (isMidletProcessRunning(activity)) {
+			Toast.makeText(activity, R.string.backup_midlet_running, Toast.LENGTH_LONG).show();
+			return false;
+		}
+		return true;
+	}
+
+	private void startQiniuRestore() {
+		FragmentActivity activity = requireActivity();
+		QiniuBackupConfig config = QiniuBackupConfig.load(activity);
+		if (!config.isRestoreValid()) {
+			Toast.makeText(activity, R.string.qiniu_restore_config_required, Toast.LENGTH_LONG).show();
+			QiniuBackupDialog.show(activity);
+			return;
+		}
+		if (!canRestoreFromCloud(activity)) {
+			return;
+		}
+		AlertDialog progress = new AlertDialog.Builder(activity)
+				.setMessage(R.string.qiniu_loading_backups).setCancelable(false).show();
+		Single.fromCallable(() -> new QiniuRestoreClient(activity, config).listBackups())
+				.subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
+				.subscribe(entries -> {
+					progress.dismiss();
+					if (isAdded() && !activity.isFinishing()) {
+						showQiniuBackups(config, entries);
+					}
+				}, error -> {
+					progress.dismiss();
+					LogUtils.diagnostic(activity, "Qiniu restore listing task failed", error);
+					Toast.makeText(activity, R.string.qiniu_restore_failed, Toast.LENGTH_LONG).show();
+				});
+	}
+
+	private void showQiniuBackups(QiniuBackupConfig config, List<QiniuBackupEntry> entries) {
+		FragmentActivity activity = requireActivity();
+		if (entries.isEmpty()) {
+			Toast.makeText(activity, R.string.qiniu_no_backups, Toast.LENGTH_LONG).show();
+			return;
+		}
+		String[] labels = new String[entries.size()];
+		boolean[] checked = new boolean[entries.size()];
+		java.text.DateFormat dateFormat = java.text.DateFormat.getDateTimeInstance();
+		for (int i = 0; i < entries.size(); i++) {
+			QiniuBackupEntry entry = entries.get(i);
+			String name = entry.getKey().substring("java-save/".length(), entry.getKey().length() - 4);
+			labels[i] = name + (entry.getModifiedTime() > 0
+					? "\n" + dateFormat.format(new java.util.Date(entry.getModifiedTime())) : "")
+					+ (entry.getSize() >= 0 ? "  " + android.text.format.Formatter.formatShortFileSize(activity, entry.getSize()) : "");
+		}
+		AlertDialog selection = new AlertDialog.Builder(activity)
+				.setTitle(R.string.qiniu_restore)
+				.setMultiChoiceItems(labels, checked, (dialog, which, selected) -> checked[which] = selected)
+				.setNegativeButton(android.R.string.cancel, null)
+				.setPositiveButton(android.R.string.ok, null).create();
+		selection.setOnShowListener(ignored -> selection.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+			List<QiniuBackupEntry> selected = new ArrayList<>();
+			for (int i = 0; i < checked.length; i++) {
+				if (checked[i]) {
+					selected.add(entries.get(i));
+				}
+			}
+			if (selected.isEmpty()) {
+				Toast.makeText(activity, R.string.qiniu_select_backup, Toast.LENGTH_SHORT).show();
+				return;
+			}
+			selection.dismiss();
+			new AlertDialog.Builder(activity).setTitle(R.string.qiniu_restore)
+					.setMessage(activity.getString(R.string.qiniu_restore_confirm, selected.size()))
+					.setNegativeButton(android.R.string.cancel, null)
+					.setPositiveButton(android.R.string.ok, (dialog, which) -> runQiniuRestore(config, selected)).show();
+		}));
+		selection.show();
+	}
+
+	private void runQiniuRestore(QiniuBackupConfig config, List<QiniuBackupEntry> entries) {
+		FragmentActivity activity = requireActivity();
+		if (!canRestoreFromCloud(activity)) {
+			return;
+		}
+		AlertDialog progress = new AlertDialog.Builder(activity)
+				.setMessage(R.string.backup_in_progress).setCancelable(false).show();
+		Single.fromCallable(() -> {
+			if (isMidletProcessRunning(activity)) {
+				throw new IllegalStateException("MIDlet process is running");
+			}
+			return new QiniuRestoreClient(activity, config).restore(entries, appRepository);
+		}).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
+				.subscribe(summary -> {
+					progress.dismiss();
+					new AlertDialog.Builder(activity).setTitle(R.string.qiniu_restore)
+							.setMessage(activity.getString(R.string.qiniu_restore_result, summary.getSuccess(),
+									summary.getSkipped(), summary.getFailed()))
+							.setPositiveButton(android.R.string.ok, null).show();
+				}, error -> {
+					progress.dismiss();
+					LogUtils.diagnostic(activity, "Qiniu restore task failed", error);
+					Toast.makeText(activity, R.string.qiniu_restore_failed, Toast.LENGTH_LONG).show();
 				});
 	}
 

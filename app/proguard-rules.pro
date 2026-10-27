@@ -37,3 +37,5 @@
 -keep class com.arthenica.mobileffmpeg.** { *; }
 -keep class org.acra.attachment.DefaultAttachmentProvider { *; }
 -keep class ru.playsoftware.j2meloader.crashes.models.* { *; }
+# Backup metadata is read across installs and devices through Gson.
+-keep class ru.playsoftware.j2meloader.backup.BackupMeta { *; }

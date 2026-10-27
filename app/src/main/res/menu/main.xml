@@ -48,6 +48,10 @@
         android:title="@string/import_all"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_qiniu_restore"
+        android:title="@string/qiniu_restore"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_save_log"
         android:title="@string/save_log"
         app:showAsAction="never" />

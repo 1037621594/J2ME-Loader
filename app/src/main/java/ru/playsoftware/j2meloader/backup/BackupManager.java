@@ -139,18 +139,11 @@ public final class BackupManager {
 					continue;
 				}
 				try {
-					File installed = findInstalled(meta.getName(), meta.getVendor());
-					if (installed == null) {
-						File game = new File(folder, GAME_DIR);
-						if (!new File(game, Config.MIDLET_DEX_FILE).isFile()) {
-							Log.w(TAG, "import skipped, game is not installed and backup has no game: " + folder);
-							skipped++;
-							continue;
-						}
-						installed = installGame(game, meta, repository);
+					if (importBackup(folder, repository)) {
+						success++;
+					} else {
+						skipped++;
 					}
-					restoreInto(folder, installed);
-					success++;
 				} catch (Exception e) {
 					Log.e(TAG, "import failed: " + folder, e);
 					failed++;
@@ -159,6 +152,36 @@ public final class BackupManager {
 		}
 		Log.i(TAG, "import finished: success=" + success + ", skipped=" + skipped + ", failed=" + failed);
 		return new BackupSummary(success, skipped, failed);
+	}
+
+	/** Restores only this snapshot, without importing unrelated local backups. */
+	public static boolean importBackup(File folder, AppRepository repository) throws IOException {
+		return importBackup(folder, repository, false);
+	}
+
+	public static boolean importBackup(File folder, AppRepository repository, boolean backupCurrent) throws IOException {
+		BackupMeta meta = readMeta(folder);
+		if (meta == null) {
+			throw new IOException("Backup metadata is missing or invalid");
+		}
+		File installed = findInstalled(meta.getName(), meta.getVendor());
+		if (installed != null && backupCurrent) {
+			backupApp(installed, false);
+		}
+		if (installed == null) {
+			File game = new File(folder, GAME_DIR);
+			if (!new File(game, Config.MIDLET_DEX_FILE).isFile()) {
+				return false;
+			}
+			Descriptor descriptor = new Descriptor(new File(game, Config.MIDLET_MANIFEST_FILE), false);
+			if (!meta.getName().equalsIgnoreCase(descriptor.getName())
+					|| (meta.getVendor() != null && !meta.getVendor().equalsIgnoreCase(descriptor.getVendor()))) {
+				throw new IOException("Backup game does not match its metadata");
+			}
+			installed = installGame(game, meta, repository);
+		}
+		restoreInto(folder, installed);
+		return true;
 	}
 
 	private static File backupFolder(File appDir) throws IOException {
@@ -230,7 +253,7 @@ public final class BackupManager {
 		return target;
 	}
 
-	private static BackupMeta readMeta(File folder) {
+	static BackupMeta readMeta(File folder) {
 		File file = new File(folder, META_FILE);
 		if (!file.isFile()) {
 			return null;

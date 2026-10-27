@@ -327,4 +327,22 @@
     <string name="loading_log">正在读取日志…</string>
     <string name="load_log_failed">日志读取失败，请点击刷新重试。</string>
     <string name="log_copied">日志已复制</string>
+    <string name="qiniu_download_url">下载域名（HTTP/HTTPS）</string>
+    <string name="qiniu_list_url">文件列表接口域名（HTTP/HTTPS）</string>
+    <string name="qiniu_restore_help">云端恢复需填写该空间的下载域名，例如 http://你的域名.clouddn.com。下载域名与上传域名分开配置。文件列表接口使用空间所在区域的列举域名，默认 https://rsf.qiniuapi.com。下载统一使用签名链接，支持公有和私有空间。恢复不需要开启自动上传。</string>
+    <string name="qiniu_restore">从七牛云恢复</string>
+    <string name="qiniu_restore_config_required">请填写空间名称、AccessKey、SecretKey、下载域名和文件列表接口域名。两个域名均需为有效的 HTTP/HTTPS 地址，不能包含路径。</string>
+    <string name="qiniu_loading_backups">正在读取七牛云 /java-save 备份列表…</string>
+    <string name="qiniu_no_backups">七牛云 /java-save 下没有找到 ZIP 备份。</string>
+    <string name="qiniu_select_backup">请至少选择一个备份。</string>
+    <string name="qiniu_restore_confirm">确定恢复选中的 %1$d 个云端备份？现有存档和设置将被覆盖，覆盖前会将当前存档备份到 JavaGame/Save。本机未安装的游戏，备份含游戏本体时会安装，否则跳过。请先退出所有游戏。</string>
+    <string name="qiniu_restore_result">云端恢复完成。成功：%1$d，跳过（本机未安装且备份无游戏本体）：%2$d，失败：%3$d。失败详情可在日志中查看。</string>
+    <string name="qiniu_restore_failed">云端恢复失败，请打开“查看日志”获取详情。</string>
+    <string name="qiniu_transfer_help">复制当前填写的配置，可迁移到另一台手机。导出内容包含 AccessKey 和 SecretKey，请妥善保管。导入后点击“确定”保存。</string>
+    <string name="qiniu_export_config">一键复制配置到剪切板</string>
+    <string name="qiniu_import_config">从剪切板导入配置</string>
+    <string name="qiniu_config_copied">配置已复制，包含密钥，请勿公开分享。</string>
+    <string name="qiniu_config_copy_failed">复制配置失败。</string>
+    <string name="qiniu_config_imported">配置已填入，点击“确定”保存。</string>
+    <string name="qiniu_config_import_failed">剪切板中没有有效的配置，或配置格式不受支持。</string>
 </resources>
