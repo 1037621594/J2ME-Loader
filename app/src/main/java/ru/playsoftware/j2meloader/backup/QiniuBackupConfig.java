@@ -38,7 +38,9 @@ public final class QiniuBackupConfig {
 		}
 		try {
 			URI uri = new URI(uploadUrl);
-			return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null
+			boolean supportedScheme = "http".equalsIgnoreCase(uri.getScheme())
+					|| "https".equalsIgnoreCase(uri.getScheme());
+			return supportedScheme && uri.getHost() != null
 					&& uri.getUserInfo() == null && uri.getQuery() == null && uri.getFragment() == null
 					&& (uri.getPath().isEmpty() || "/".equals(uri.getPath()));
 		} catch (URISyntaxException e) {

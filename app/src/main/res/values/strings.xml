@@ -368,9 +368,9 @@
     <string name="qiniu_bucket">Bucket name</string>
     <string name="qiniu_access_key">AccessKey</string>
     <string name="qiniu_secret_key">SecretKey</string>
-    <string name="qiniu_upload_url">HTTPS upload endpoint</string>
-    <string name="qiniu_help">Both public and private buckets are supported; uploads always use a signed upload token. No bucket visibility setting is needed. Enter your Qiniu bucket, keys and the HTTPS upload endpoint for its region (not the download/CDN domain). Backups are uploaded as java-save/game_vendor.zip, replacing the previous cloud backup. Existing local backups can be uploaded from the sync menu. Cloud files are not deleted. Credentials are saved in private app storage on this device.</string>
-    <string name="qiniu_invalid_config">Enter a bucket, AccessKey, SecretKey and a valid HTTPS upload endpoint without a path.</string>
+    <string name="qiniu_upload_url">HTTP/HTTPS upload endpoint</string>
+    <string name="qiniu_help">Both public and private buckets are supported; uploads always use a signed upload token. No bucket visibility setting is needed. Enter your Qiniu bucket, keys and the HTTP/HTTPS upload endpoint for its region (not the download/CDN domain). Backups are uploaded as java-save/game_vendor.zip, replacing the previous cloud backup. Existing local backups can be uploaded from the sync menu. Cloud files are not deleted. Credentials are saved in private app storage on this device.</string>
+    <string name="qiniu_invalid_config">Enter a bucket, AccessKey, SecretKey and a valid HTTP/HTTPS upload endpoint without a path.</string>
     <string name="qiniu_configure_first">Configure and enable Qiniu Cloud backup first.</string>
     <string name="qiniu_backup_done">Saved locally and synced to Qiniu Cloud /java-save</string>
     <string name="qiniu_local_saved_upload_failed">Local backup saved, but Qiniu upload failed. Check the endpoint, credentials and network, then retry from the sync menu.</string>
