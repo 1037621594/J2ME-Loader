@@ -125,4 +125,18 @@
     <string name="mapping_dialog_message">當前映射: %1$s</string>
     <string name="mapping_dialog_title">按任意按鍵</string>
     <string name="reset_mapping">重設</string>
+    <string name="qiniu_settings">七牛雲備份設定</string>
+    <string name="qiniu_sync">同步現有備份到七牛雲</string>
+    <string name="qiniu_enabled">備份或匯出後自動上傳</string>
+    <string name="qiniu_bucket">儲存空間名稱（Bucket）</string>
+    <string name="qiniu_access_key">AccessKey</string>
+    <string name="qiniu_secret_key">SecretKey</string>
+    <string name="qiniu_upload_url">HTTPS 上傳網域</string>
+    <string name="qiniu_help">支援公開和私有 Bucket，上傳統一使用金鑰簽署的上傳憑證，無需切換空間類型。填寫七牛雲空間名稱、金鑰及空間所在地區的 HTTPS 上傳網域（不是下載/CDN 網域）。備份以 java-save/遊戲名_廠商.zip 上傳，同名覆蓋雲端舊備份。現有本機備份可透過同步選單上傳，不會刪除雲端檔案。金鑰儲存在本機應用程式私有儲存空間中。</string>
+    <string name="qiniu_invalid_config">請填寫空間名稱、AccessKey、SecretKey 及有效的 HTTPS 上傳網域，網域不能包含路徑。</string>
+    <string name="qiniu_configure_first">請先設定並啟用七牛雲備份。</string>
+    <string name="qiniu_backup_done">已儲存本機備份並同步到七牛雲 /java-save</string>
+    <string name="qiniu_local_saved_upload_failed">本機備份已儲存，七牛雲上傳失敗。請檢查上傳網域、金鑰和網路，再透過同步選單重試。</string>
+    <string name="qiniu_sync_result">七牛雲 /java-save 同步完成：成功 %1$d，失敗 %2$d</string>
+    <string name="qiniu_sync_failed">雲端同步失敗，請檢查儲存權限、設定及網路。</string>
 </resources>

@@ -82,6 +82,9 @@ import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 import ru.playsoftware.j2meloader.R;
 import ru.playsoftware.j2meloader.backup.BackupManager;
+import ru.playsoftware.j2meloader.backup.QiniuBackupClient;
+import ru.playsoftware.j2meloader.backup.QiniuBackupConfig;
+import ru.playsoftware.j2meloader.backup.QiniuBackupDialog;
 import ru.playsoftware.j2meloader.backup.StoragePermission;
 import ru.playsoftware.j2meloader.appsdb.AppRepository;
 import ru.playsoftware.j2meloader.config.Config;
@@ -316,6 +319,7 @@ public class AppsListFragment extends ListFragment {
 
 	private void runAppBackupTask(AppItem appItem, boolean restore) {
 		FragmentActivity activity = requireActivity();
+		QiniuBackupConfig cloudConfig = QiniuBackupConfig.load(activity);
 		AlertDialog progress = new AlertDialog.Builder(activity)
 				.setMessage(R.string.backup_in_progress)
 				.setCancelable(false)
@@ -325,20 +329,27 @@ public class AppsListFragment extends ListFragment {
 				stopMidletProcess(activity);
 				waitForMidletProcess(activity);
 				BackupManager.restoreApp(new File(appItem.getPathExt()));
-				return null;
+				return activity.getString(R.string.restore_done);
 			}
 			if (isMidletProcessRunning(activity)) {
 				throw new IllegalStateException("MIDlet process is running");
 			}
 			BackupManager.backupApp(new File(appItem.getPathExt()), false);
-			return null;
+			if (cloudConfig.isEnabled()) {
+				try {
+					BackupManager.uploadApp(new File(appItem.getPathExt()), new QiniuBackupClient(activity, cloudConfig));
+					return activity.getString(R.string.qiniu_backup_done);
+				} catch (IOException e) {
+					return activity.getString(R.string.qiniu_local_saved_upload_failed);
+				}
+			}
+			return activity.getString(R.string.backup_done);
 		})
 				.subscribeOn(Schedulers.io())
 				.observeOn(AndroidSchedulers.mainThread())
-				.subscribe(ignored -> {
+				.subscribe(message -> {
 					progress.dismiss();
-					Toast.makeText(activity, restore ? R.string.restore_done : R.string.backup_done,
-							Toast.LENGTH_SHORT).show();
+					Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
 				}, error -> {
 					progress.dismiss();
 					Log.e(TAG, "App save operation failed: " + appItem.getPathExt(), error);
@@ -462,6 +473,10 @@ public class AppsListFragment extends ListFragment {
 			startBackupTask(false);
 		} else if (itemId == R.id.action_import_all) {
 			startBackupTask(true);
+		} else if (itemId == R.id.action_qiniu_settings) {
+			QiniuBackupDialog.show(activity);
+		} else if (itemId == R.id.action_qiniu_sync) {
+			startQiniuSync();
 		} else if (itemId == R.id.action_exit_app) {
 			activity.finish();
 		} else if (itemId == R.id.action_sort) {
@@ -495,11 +510,13 @@ public class AppsListFragment extends ListFragment {
 
 	private void runBackupTask(boolean isImport) {
 		FragmentActivity activity = requireActivity();
+		QiniuBackupConfig cloudConfig = QiniuBackupConfig.load(activity);
+		QiniuBackupClient cloud = cloudConfig.isEnabled() ? new QiniuBackupClient(activity, cloudConfig) : null;
 		AlertDialog progress = new AlertDialog.Builder(activity)
 				.setMessage(R.string.backup_in_progress)
 				.setCancelable(false)
 				.show();
-		Single.fromCallable(() -> isImport ? BackupManager.importAll(appRepository) : BackupManager.exportAll())
+		Single.fromCallable(() -> isImport ? BackupManager.importAll(appRepository) : BackupManager.exportAll(cloud))
 				.subscribeOn(Schedulers.io())
 				.observeOn(AndroidSchedulers.mainThread())
 				.subscribe(summary -> {
@@ -507,6 +524,10 @@ public class AppsListFragment extends ListFragment {
 					String message = isImport
 							? getString(R.string.import_result, summary.getSuccess(), summary.getSkipped(), summary.getFailed())
 							: getString(R.string.export_result, summary.getSuccess(), summary.getFailed());
+					if (!isImport && cloud != null) {
+						message += "\n" + activity.getString(R.string.qiniu_sync_result,
+								summary.getCloudSuccess(), summary.getCloudFailed());
+					}
 					new AlertDialog.Builder(activity)
 							.setMessage(message)
 							.setPositiveButton(android.R.string.ok, null)
@@ -515,6 +536,34 @@ public class AppsListFragment extends ListFragment {
 					progress.dismiss();
 					Log.e(TAG, "Backup task failed", error);
 					Toast.makeText(activity, R.string.backup_failed, Toast.LENGTH_LONG).show();
+				});
+	}
+
+	private void startQiniuSync() {
+		FragmentActivity activity = requireActivity();
+		QiniuBackupConfig config = QiniuBackupConfig.load(activity);
+		if (!config.isEnabled() || !config.isValid()) {
+			Toast.makeText(activity, R.string.qiniu_configure_first, Toast.LENGTH_LONG).show();
+			QiniuBackupDialog.show(activity);
+			return;
+		}
+		if (!StoragePermission.hasAccess(activity)) {
+			Toast.makeText(activity, R.string.backup_need_permission, Toast.LENGTH_LONG).show();
+			StoragePermission.request(activity);
+			return;
+		}
+		AlertDialog progress = new AlertDialog.Builder(activity)
+				.setMessage(R.string.backup_in_progress).setCancelable(false).show();
+		Single.fromCallable(() -> new QiniuBackupClient(activity, config).syncAll())
+				.subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
+				.subscribe(summary -> {
+					progress.dismiss();
+					new AlertDialog.Builder(activity)
+							.setMessage(activity.getString(R.string.qiniu_sync_result, summary.getSuccess(), summary.getFailed()))
+							.setPositiveButton(android.R.string.ok, null).show();
+				}, error -> {
+					progress.dismiss();
+					Toast.makeText(activity, R.string.qiniu_sync_failed, Toast.LENGTH_LONG).show();
 				});
 	}
 

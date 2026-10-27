@@ -36,6 +36,14 @@
         android:title="@string/export_all"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_qiniu_settings"
+        android:title="@string/qiniu_settings"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_qiniu_sync"
+        android:title="@string/qiniu_sync"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_import_all"
         android:title="@string/import_all"
         app:showAsAction="never" />

@@ -9,4 +9,10 @@ public class BackupSummary {
 	private int success;
 	private int skipped;
 	private int failed;
+	private int cloudSuccess;
+	private int cloudFailed;
+
+	public BackupSummary(int success, int skipped, int failed) {
+		this(success, skipped, failed, 0, 0);
+	}
 }

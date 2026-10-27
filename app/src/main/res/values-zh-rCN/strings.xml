@@ -307,4 +307,18 @@
         <item>增加</item>
         <item>减少</item>
     </string-array>
+    <string name="qiniu_settings">七牛云备份配置</string>
+    <string name="qiniu_sync">同步已有备份到七牛云</string>
+    <string name="qiniu_enabled">备份或导出后自动上传</string>
+    <string name="qiniu_bucket">存储空间名称（Bucket）</string>
+    <string name="qiniu_access_key">AccessKey</string>
+    <string name="qiniu_secret_key">SecretKey</string>
+    <string name="qiniu_upload_url">HTTPS 上传域名</string>
+    <string name="qiniu_help">支持公有和私有 Bucket，上传统一使用密钥签名的上传凭证，无需切换空间类型。填写七牛云空间名称、密钥及空间所在区域的 HTTPS 上传域名（不是下载/CDN 域名）。备份以 java-save/游戏名_厂商.zip 上传，同名覆盖云端旧备份。已有本地备份可通过同步菜单上传，不会删除云端文件。密钥保存在本机应用私有存储中。</string>
+    <string name="qiniu_invalid_config">请填写空间名称、AccessKey、SecretKey 及有效的 HTTPS 上传域名，域名不能包含路径。</string>
+    <string name="qiniu_configure_first">请先配置并启用七牛云备份。</string>
+    <string name="qiniu_backup_done">已保存本地备份并同步到七牛云 /java-save</string>
+    <string name="qiniu_local_saved_upload_failed">本地备份已保存，七牛云上传失败。请检查上传域名、密钥和网络，再通过同步菜单重试。</string>
+    <string name="qiniu_sync_result">七牛云 /java-save 同步完成：成功 %1$d，失败 %2$d</string>
+    <string name="qiniu_sync_failed">云端同步失败，请检查存储权限、配置及网络。</string>
 </resources>

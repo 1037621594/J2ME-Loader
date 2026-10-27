@@ -88,8 +88,14 @@ public final class BackupManager {
 	}
 
 	public static BackupSummary exportAll() {
+		return exportAll(null);
+	}
+
+	public static BackupSummary exportAll(QiniuBackupClient cloud) {
 		int success = 0;
 		int failed = 0;
+		int cloudSuccess = 0;
+		int cloudFailed = 0;
 		File[] dirs = new File(Config.getAppDir()).listFiles();
 		if (dirs != null) {
 			for (File dir : dirs) {
@@ -99,6 +105,14 @@ public final class BackupManager {
 				try {
 					backupApp(dir, true);
 					success++;
+					if (cloud != null) {
+						try {
+							cloud.upload(backupFolder(dir));
+							cloudSuccess++;
+						} catch (IOException e) {
+							cloudFailed++;
+						}
+					}
 				} catch (Exception e) {
 					Log.e(TAG, "export failed: " + dir, e);
 					failed++;
@@ -106,7 +120,11 @@ public final class BackupManager {
 			}
 		}
 		Log.i(TAG, "export finished: success=" + success + ", failed=" + failed);
-		return new BackupSummary(success, 0, failed);
+		return new BackupSummary(success, 0, failed, cloudSuccess, cloudFailed);
+	}
+
+	public static void uploadApp(File appDir, QiniuBackupClient cloud) throws IOException {
+		cloud.upload(backupFolder(appDir));
 	}
 
 	public static BackupSummary importAll(AppRepository repository) {
