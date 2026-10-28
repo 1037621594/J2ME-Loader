@@ -238,7 +238,7 @@ static void m3gTerminateEGL(void)
     }
 #   endif
 
-    M3G_LOG1(M3G_LOG_OBJECTS, "New GL context 0x%08X\n", (unsigned) ctx);
+    M3G_LOG1(M3G_LOG_OBJECTS, "New GL context 0x%08X\n", (unsigned) (M3Gpointer) ctx);
     return ctx;
 }
 */
@@ -259,7 +259,7 @@ static void m3gDeleteGLContext(EGLContext ctx)
     }
 #   endif
     M3G_LOG1(M3G_LOG_OBJECTS, "Destroyed GL context 0x%08X\n",
-             (unsigned) ctx);
+             (unsigned) (M3Gpointer) ctx);
 }
 
     
@@ -272,7 +272,7 @@ static EGLSurface m3gCreateWindowSurface(M3Genum format,
                                          M3GNativeWindow wnd)
 {
     EGLSurface surf;
-    EGLConfig config = m3gQueryEGLConfig(format, bufferBits, EGL_WINDOW_BIT, NULL);
+    EGLConfig config = m3gQueryEGLConfig(format, bufferBits, EGL_WINDOW_BIT, (M3GNativeBitmap) 0);
     
     if (!config) {
         return NULL;
@@ -280,7 +280,7 @@ static EGLSurface m3gCreateWindowSurface(M3Genum format,
 
     surf = eglCreateWindowSurface(eglGetDisplay(EGL_DEFAULT_DISPLAY),
                                   config,
-                                  (NativeWindowType) wnd,
+                                  (NativeWindowType) (M3Gpointer) wnd,
                                   NULL);
 
 #   if defined(M3G_DEBUG)
@@ -292,7 +292,7 @@ static EGLSurface m3gCreateWindowSurface(M3Genum format,
 
     if (surf != EGL_NO_SURFACE) {
         M3G_LOG1(M3G_LOG_OBJECTS, "New GL window surface 0x%08X\n",
-                 (unsigned) surf);
+                 (unsigned) (M3Gpointer) surf);
         return surf;
     }
     return NULL;
@@ -328,7 +328,7 @@ static EGLSurface m3gCreateBitmapSurface(M3Genum format,
     
     if (surf != EGL_NO_SURFACE) {
         M3G_LOG1(M3G_LOG_OBJECTS, "New GL pixmap surface 0x%08X\n",
-                 (unsigned) surf);
+                 (unsigned) (M3Gpointer) surf);
         return surf;
     }
     return NULL;
@@ -370,7 +370,7 @@ static EGLSurface m3gCreatePBufferSurface(M3Genum format,
                                               
     if (surf != EGL_NO_SURFACE) {
         M3G_LOG1(M3G_LOG_OBJECTS, "New GL pbuffer surface 0x%08X\n",
-                 (unsigned) surf);
+                 (unsigned) (M3Gpointer) surf);
         return surf;
     }
     return NULL;
@@ -393,7 +393,7 @@ static void m3gDeleteGLSurface(EGLSurface surface)
 #   endif
 
     M3G_LOG1(M3G_LOG_OBJECTS, "Destroyed GL surface 0x%08X\n",
-             (unsigned) surface);
+             (unsigned) (M3Gpointer) surface);
 }
 
 /*!
@@ -1496,7 +1496,7 @@ M3G_API void m3gBindEGLSurfaceTarget(M3GRenderContext context,
     Interface *m3g = M3G_INTERFACE(ctx);
     M3G_VALIDATE_OBJECT(ctx);
 
-    M3G_LOG1(M3G_LOG_RENDERING, "Binding EGL surface 0x%08X\n", (unsigned) surface);
+    M3G_LOG1(M3G_LOG_RENDERING, "Binding EGL surface 0x%08X\n", (unsigned) (M3Gpointer) surface);
     {
         EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         EGLSurface surf = (EGLSurface) surface;

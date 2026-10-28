@@ -1,11 +1,8 @@
 package ru.playsoftware.j2meloader.backup;
 
 import android.content.Context;
-import android.util.Base64;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
+import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -16,8 +13,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.security.GeneralSecurityException;
-import java.util.UUID;
+import java.security.MessageDigest;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -27,11 +27,13 @@ import javax.crypto.spec.SecretKeySpec;
 import ru.playsoftware.j2meloader.util.LogUtils;
 
 /**
- * Uploads complete backup snapshots to public or private Qiniu buckets.
- * Both use the same signed upload token; bucket visibility only affects downloads.
+ * Uploads complete backup snapshots to an S3-compatible bucket.
+ * Requests are signed with AWS Signature Version 4, matching the read side in {@link QiniuRestoreClient}.
  * Call only from a worker thread.
  */
 public final class QiniuBackupClient {
+	private static final String EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
 	private final Context context;
 	private final QiniuBackupConfig config;
 
@@ -41,25 +43,25 @@ public final class QiniuBackupClient {
 	}
 
 	public void upload(File folder) throws IOException {
-		LogUtils.diagnostic(context, "Qiniu upload start: endpoint=" + config.getUploadUrl()
+		LogUtils.diagnostic(context, "S3 upload start: endpoint=" + config.getEndpoint()
 				+ ", bucket=" + config.getBucket() + ", key=java-save/" + folder.getName() + ".zip", null);
 		try {
 			uploadSnapshot(folder);
-			LogUtils.diagnostic(context, "Qiniu upload succeeded: " + folder.getName(), null);
+			LogUtils.diagnostic(context, "S3 upload succeeded: " + folder.getName(), null);
 		} catch (IOException | RuntimeException e) {
-			LogUtils.diagnostic(context, "Qiniu upload failed: " + folder.getName(), e);
+			LogUtils.diagnostic(context, "S3 upload failed: " + folder.getName(), e);
 			throw e;
 		}
 	}
 
 	private void uploadSnapshot(File folder) throws IOException {
 		if (!config.isValid()) {
-			throw new IOException("Invalid Qiniu configuration");
+			throw new IOException("Invalid S3 configuration");
 		}
 		if (!new File(folder, "meta.json").isFile()) {
 			throw new IOException("Backup metadata is missing");
 		}
-		File archive = File.createTempFile("qiniu-backup-", ".zip", context.getCacheDir());
+		File archive = File.createTempFile("s3-backup-", ".zip", context.getCacheDir());
 		try {
 			try (ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(archive)))) {
 				zipTree(folder, "", zip);
@@ -94,81 +96,41 @@ public final class QiniuBackupClient {
 				failed++;
 			}
 		}
-		LogUtils.diagnostic(context, "Qiniu sync finished: success=" + success + ", failed=" + failed, null);
+		LogUtils.diagnostic(context, "S3 sync finished: success=" + success + ", failed=" + failed, null);
 		return new BackupSummary(success, 0, failed);
 	}
 
-	private String token(String key) throws IOException {
-		try {
-			JSONObject policy = new JSONObject();
-			policy.put("scope", config.getBucket() + ":" + key);
-			policy.put("deadline", System.currentTimeMillis() / 1000 + 3600);
-			String encoded = base64(policy.toString().getBytes("UTF-8"));
-			Mac mac = Mac.getInstance("HmacSHA1");
-			mac.init(new SecretKeySpec(config.getSecretKey().getBytes("UTF-8"), "HmacSHA1"));
-			return config.getAccessKey() + ":" + base64(mac.doFinal(encoded.getBytes("UTF-8"))) + ":" + encoded;
-		} catch (GeneralSecurityException | JSONException e) {
-			throw new IOException("Cannot create Qiniu upload token", e);
-		}
-	}
-
-	private static String base64(byte[] bytes) {
-		return Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP);
-	}
-
 	private void uploadArchive(File archive, String key) throws IOException {
-		String boundary = "J2ME" + UUID.randomUUID().toString();
-		String token = token(key);
-		byte[] tokenField = field(boundary, "token", token);
-		byte[] keyField = field(boundary, "key", key);
-		byte[] fileHeader = ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"backup.zip\"\r\n"
-				+ "Content-Type: application/zip\r\n\r\n").getBytes("UTF-8");
-		byte[] ending = ("\r\n--" + boundary + "--\r\n").getBytes("UTF-8");
-		long length = archive.length() + tokenField.length + keyField.length + fileHeader.length + ending.length;
-		LogUtils.diagnostic(context, "Qiniu archive bytes=" + archive.length() + ", request bytes=" + length, null);
-		if (length > Integer.MAX_VALUE) {
-			throw new IOException("Backup is too large for form upload");
-		}
-		HttpURLConnection connection = (HttpURLConnection) new URL(config.getUploadUrl()).openConnection();
+		String path = "/" + config.getBucket() + "/" + key;
+		String payloadHash = sha256Hex(archive);
+		URL url = new URL(base(config.getEndpoint()) + path);
+		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 		try {
 			connection.setConnectTimeout(30000);
 			connection.setReadTimeout(120000);
 			connection.setInstanceFollowRedirects(false);
-			connection.setRequestMethod("POST");
+			connection.setUseCaches(false);
+			connection.setRequestMethod("PUT");
 			connection.setDoOutput(true);
-			connection.setFixedLengthStreamingMode((int) length);
-			connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
-			try (OutputStream out = new BufferedOutputStream(connection.getOutputStream())) {
-				out.write(tokenField);
-				out.write(keyField);
-				out.write(fileHeader);
-				try (InputStream in = new FileInputStream(archive)) {
-					copy(in, out);
-				}
-				out.write(ending);
+			connection.setFixedLengthStreamingMode(archive.length());
+			connection.setRequestProperty("Content-Type", "application/zip");
+			signRequest(connection, "PUT", path, payloadHash, new Date());
+			try (OutputStream out = new BufferedOutputStream(connection.getOutputStream());
+				 InputStream in = new BufferedInputStream(new FileInputStream(archive))) {
+				copy(in, out);
 			}
 			int status = connection.getResponseCode();
-			LogUtils.diagnostic(context, "Qiniu response: HTTP " + status
-					+ ", requestId=" + connection.getHeaderField("X-Reqid")
-					+ ", contentType=" + connection.getContentType()
-					+ ", server=" + connection.getHeaderField("Server")
-					+ ", location=" + connection.getHeaderField("Location"), null);
+			LogUtils.diagnostic(context, "S3 upload response: HTTP " + status, null);
 			if (status != HttpURLConnection.HTTP_OK) {
 				try (InputStream in = connection.getErrorStream()) {
 					if (in != null) {
-						ByteArrayOutputStream response = new ByteArrayOutputStream();
-						byte[] buffer = new byte[1024];
-						int count;
-						while (response.size() < 8192 && (count = in.read(buffer, 0,
-								Math.min(buffer.length, 8192 - response.size()))) != -1) {
-							response.write(buffer, 0, count);
-						}
-						LogUtils.diagnostic(context, "Qiniu error response (up to 8 KiB): " + response.toString("UTF-8"), null);
+						LogUtils.diagnostic(context, "S3 upload error response (up to 8 KiB): "
+								+ readText(in, 8192), null);
 					}
 				} catch (IOException e) {
-					LogUtils.diagnostic(context, "Cannot read Qiniu error response", e);
+					LogUtils.diagnostic(context, "Cannot read S3 error response", e);
 				}
-				throw new IOException("Qiniu upload failed (HTTP " + status + ")");
+				throw new IOException("S3 upload failed (HTTP " + status + ")");
 			}
 			try (InputStream in = connection.getInputStream()) {
 				byte[] buffer = new byte[1024];
@@ -181,9 +143,110 @@ public final class QiniuBackupClient {
 		}
 	}
 
-	private static byte[] field(String boundary, String name, String value) throws IOException {
-		return ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name
-				+ "\"\r\n\r\n" + value + "\r\n").getBytes("UTF-8");
+	private void signRequest(HttpURLConnection connection, String method, String path,
+							 String payloadHash, Date date) throws IOException {
+		try {
+			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US);
+			dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+			String amzDate = dateFormat.format(date);
+			String dateStamp = amzDate.substring(0, 8);
+
+			if (payloadHash == null || payloadHash.isEmpty()) {
+				payloadHash = EMPTY_SHA256;
+			}
+
+			String canonicalUri = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
+			String canonicalQueryString = path.contains("?") ? path.substring(path.indexOf('?') + 1) : "";
+			String canonicalHeaders = "host:" + connection.getURL().getHost()
+					+ "\nx-amz-content-sha256:" + payloadHash
+					+ "\nx-amz-date:" + amzDate + "\n";
+			String signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+			String canonicalRequest = method + "\n" + canonicalUri + "\n" + canonicalQueryString + "\n"
+					+ canonicalHeaders + "\n" + signedHeaders + "\n" + payloadHash;
+
+			String algorithm = "AWS4-HMAC-SHA256";
+			String credentialScope = dateStamp + "/" + config.getRegion() + "/s3/aws4_request";
+			String stringToSign = algorithm + "\n" + amzDate + "\n" + credentialScope + "\n"
+					+ sha256Hex(canonicalRequest);
+
+			byte[] signingKey = getSignatureKey(config.getSecretKey(), dateStamp, config.getRegion(), "s3");
+			String signature = hmacSha256Hex(stringToSign, signingKey);
+
+			String authorizationHeader = algorithm + " Credential=" + config.getAccessKey() + "/"
+					+ credentialScope + ", SignedHeaders=" + signedHeaders + ", Signature=" + signature;
+
+			connection.setRequestProperty("x-amz-date", amzDate);
+			connection.setRequestProperty("x-amz-content-sha256", payloadHash);
+			connection.setRequestProperty("Authorization", authorizationHeader);
+		} catch (Exception e) {
+			throw new IOException("Cannot sign S3 request", e);
+		}
+	}
+
+	private byte[] getSignatureKey(String key, String dateStamp, String regionName, String serviceName)
+			throws Exception {
+		byte[] kSecret = ("AWS4" + key).getBytes("UTF-8");
+		byte[] kDate = hmacSha256(dateStamp, kSecret);
+		byte[] kRegion = hmacSha256(regionName, kDate);
+		byte[] kService = hmacSha256(serviceName, kRegion);
+		return hmacSha256("aws4_request", kService);
+	}
+
+	private byte[] hmacSha256(String data, byte[] key) throws Exception {
+		Mac mac = Mac.getInstance("HmacSHA256");
+		mac.init(new SecretKeySpec(key, "HmacSHA256"));
+		return mac.doFinal(data.getBytes("UTF-8"));
+	}
+
+	private String hmacSha256Hex(String data, byte[] key) throws Exception {
+		return bytesToHex(hmacSha256(data, key));
+	}
+
+	private String sha256Hex(String data) throws IOException {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			return bytesToHex(digest.digest(data.getBytes("UTF-8")));
+		} catch (Exception e) {
+			throw new IOException("Cannot compute SHA-256", e);
+		}
+	}
+
+	private String sha256Hex(File file) throws IOException {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
+				byte[] buffer = new byte[16 * 1024];
+				int count;
+				while ((count = in.read(buffer)) != -1) {
+					digest.update(buffer, 0, count);
+				}
+			}
+			return bytesToHex(digest.digest());
+		} catch (Exception e) {
+			throw new IOException("Cannot compute SHA-256", e);
+		}
+	}
+
+	private String bytesToHex(byte[] bytes) {
+		StringBuilder result = new StringBuilder();
+		for (byte b : bytes) {
+			result.append(String.format("%02x", b));
+		}
+		return result.toString();
+	}
+
+	private static String base(String url) {
+		return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+	}
+
+	private static String readText(InputStream in, int limit) throws IOException {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		byte[] buffer = new byte[4096];
+		int count;
+		while (out.size() < limit && (count = in.read(buffer, 0, Math.min(buffer.length, limit - out.size()))) != -1) {
+			out.write(buffer, 0, count);
+		}
+		return out.toString("UTF-8");
 	}
 
 	private static void zipTree(File file, String path, ZipOutputStream zip) throws IOException {
