@@ -4,10 +4,6 @@ import android.content.Context;
 import android.net.Uri;
 import android.util.Base64;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -17,14 +13,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.io.UnsupportedEncodingException;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -32,7 +33,7 @@ import javax.crypto.spec.SecretKeySpec;
 import ru.playsoftware.j2meloader.appsdb.AppRepository;
 import ru.playsoftware.j2meloader.util.LogUtils;
 
-/** Lists and restores the same java-save/*.zip snapshots created by QiniuBackupClient. */
+/** Lists and restores the same java-save/*.zip snapshots using S3 protocol. */
 public final class QiniuRestoreClient {
 	private static final String PREFIX = "java-save/";
 	private static final long MAX_BYTES = 2L * 1024 * 1024 * 1024;
@@ -46,59 +47,66 @@ public final class QiniuRestoreClient {
 
 	public List<QiniuBackupEntry> listBackups() throws IOException {
 		if (!config.isRestoreValid()) {
-			throw new IOException("Configure bucket, keys, download domain and list endpoint before restoring");
+			throw new IOException("Configure bucket, keys and endpoint before restoring");
 		}
-		LogUtils.diagnostic(context, "Qiniu list start: endpoint=" + config.getListUrl()
+		LogUtils.diagnostic(context, "S3 list start: endpoint=" + config.getEndpoint()
 				+ ", bucket=" + config.getBucket() + ", prefix=" + PREFIX, null);
 		try {
 			List<QiniuBackupEntry> result = new ArrayList<>();
 			Set<String> keys = new HashSet<>();
-			Set<String> markers = new HashSet<>();
-			String marker = "";
+			String marker = null;
 			do {
-				String query = "bucket=" + Uri.encode(config.getBucket()) + "&prefix=" + Uri.encode(PREFIX) + "&limit=1000";
-				if (!marker.isEmpty()) {
-					query += "&marker=" + Uri.encode(marker);
+				String path = "/" + config.getBucket() + "/?list-type=2&prefix=" + Uri.encode(PREFIX) + "&max-keys=1000";
+				if (marker != null && !marker.isEmpty()) {
+					path += "&continuation-token=" + Uri.encode(marker);
 				}
-				URL url = new URL(base(config.getListUrl()) + "/list?" + query);
+				URL url = new URL(base(config.getEndpoint()) + path);
 				HttpURLConnection connection = open(url);
 				try {
-					String contentType = "application/x-www-form-urlencoded";
-					String signingData = "GET " + url.getFile() + "\nHost: " + url.getAuthority()
-							+ "\nContent-Type: " + contentType + "\n\n";
-					connection.setRequestProperty("Content-Type", contentType);
-					connection.setRequestProperty("Authorization", "Qiniu " + sign(signingData));
+					signRequest(connection, "GET", path, "", new Date());
 					requireSuccess(connection, "list");
-					JSONObject page;
+					String xml;
 					try (InputStream in = connection.getInputStream()) {
-						page = new JSONObject(readText(in, 4 * 1024 * 1024));
+						xml = readText(in, 4 * 1024 * 1024);
 					}
-					JSONArray items = page.optJSONArray("items");
-					if (items != null) {
-						for (int i = 0; i < items.length(); i++) {
-							JSONObject item = items.getJSONObject(i);
-							String key = item.getString("key");
-							if (isBackupKey(key) && keys.add(key)) {
-								result.add(new QiniuBackupEntry(key, item.optLong("fsize", -1),
-										item.optLong("putTime", 0) / 10000));
-							}
+					// 简单的XML解析，提取Contents节点
+					int pos = 0;
+					while ((pos = xml.indexOf("<Contents>", pos)) >= 0) {
+						int end = xml.indexOf("</Contents>", pos);
+						if (end < 0) break;
+						String content = xml.substring(pos, end);
+						String key = extractXmlTag(content, "Key");
+						String sizeStr = extractXmlTag(content, "Size");
+						String lastModified = extractXmlTag(content, "LastModified");
+						if (key != null && isBackupKey(key) && keys.add(key)) {
+							long size = -1;
+							try {
+								if (sizeStr != null) size = Long.parseLong(sizeStr);
+							} catch (NumberFormatException ignored) {}
+							long modifiedTime = 0;
+							try {
+								if (lastModified != null) {
+									SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
+									sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+									modifiedTime = sdf.parse(lastModified.substring(0, Math.min(19, lastModified.length()))).getTime();
+								}
+							} catch (Exception ignored) {}
+							result.add(new QiniuBackupEntry(key, size, modifiedTime));
 						}
+						pos = end;
 					}
-					marker = page.optString("marker", "");
-					if (!marker.isEmpty() && !markers.add(marker)) {
-						throw new IOException("Qiniu returned a repeated pagination marker");
-					}
+					marker = extractXmlTag(xml, "NextContinuationToken");
 				} finally {
 					connection.disconnect();
 				}
-			} while (!marker.isEmpty());
+			} while (marker != null && !marker.isEmpty());
 			java.util.Collections.sort(result, (left, right) -> left.getModifiedTime() == right.getModifiedTime()
 					? 0 : (left.getModifiedTime() < right.getModifiedTime() ? 1 : -1));
-			LogUtils.diagnostic(context, "Qiniu list finished: backups=" + result.size(), null);
+			LogUtils.diagnostic(context, "S3 list finished: backups=" + result.size(), null);
 			return result;
-		} catch (JSONException | IOException | RuntimeException e) {
-			LogUtils.diagnostic(context, "Qiniu list failed", e);
-			throw new IOException("Cannot list Qiniu backups; see logs", e);
+		} catch (IOException | RuntimeException e) {
+			LogUtils.diagnostic(context, "S3 list failed", e);
+			throw new IOException("Cannot list S3 backups; see logs", e);
 		}
 	}
 
@@ -110,7 +118,7 @@ public final class QiniuRestoreClient {
 		int skipped = 0;
 		int failed = 0;
 		for (QiniuBackupEntry entry : entries) {
-			File work = new File(context.getCacheDir(), "qiniu-restore-" + UUID.randomUUID());
+			File work = new File(context.getCacheDir(), "s3-restore-" + UUID.randomUUID());
 			try {
 				if (!isBackupKey(entry.getKey())) {
 					throw new IOException("Invalid backup object key");
@@ -118,8 +126,8 @@ public final class QiniuRestoreClient {
 				if (!work.mkdirs()) {
 					throw new IOException("Cannot create restore staging directory");
 				}
-				LogUtils.diagnostic(context, "Qiniu restore start: key=" + entry.getKey()
-						+ ", downloadDomain=" + config.getDownloadUrl(), null);
+				LogUtils.diagnostic(context, "S3 restore start: key=" + entry.getKey()
+						+ ", endpoint=" + config.getEndpoint(), null);
 				File archive = new File(work, "backup.zip");
 				download(entry, archive);
 				File extracted = new File(work, "snapshot");
@@ -131,30 +139,29 @@ public final class QiniuRestoreClient {
 				}
 				if (BackupManager.importBackup(extracted, repository, true)) {
 					success++;
-					LogUtils.diagnostic(context, "Qiniu restore succeeded: " + entry.getKey(), null);
+					LogUtils.diagnostic(context, "S3 restore succeeded: " + entry.getKey(), null);
 				} else {
 					skipped++;
-					LogUtils.diagnostic(context, "Qiniu restore skipped: game not installed and snapshot has no game: "
+					LogUtils.diagnostic(context, "S3 restore skipped: game not installed and snapshot has no game: "
 							+ entry.getKey(), null);
 				}
 			} catch (IOException | RuntimeException e) {
 				failed++;
-				LogUtils.diagnostic(context, "Qiniu restore failed: " + entry.getKey(), e);
+				LogUtils.diagnostic(context, "S3 restore failed: " + entry.getKey(), e);
 			} finally {
 				deleteTemporary(work);
 			}
 		}
-		LogUtils.diagnostic(context, "Qiniu restore finished: success=" + success + ", skipped=" + skipped + ", failed=" + failed, null);
+		LogUtils.diagnostic(context, "S3 restore finished: success=" + success + ", skipped=" + skipped + ", failed=" + failed, null);
 		return new BackupSummary(success, skipped, failed);
 	}
 
 	private void download(QiniuBackupEntry entry, File target) throws IOException {
-		String unsignedUrl = base(config.getDownloadUrl()) + "/" + Uri.encode(entry.getKey(), "/")
-				+ "?e=" + (System.currentTimeMillis() / 1000 + 3600);
-		// Signing every download also works for public buckets, without requiring a visibility setting.
-		URL url = new URL(unsignedUrl + "&token=" + Uri.encode(sign(unsignedUrl)));
+		String path = "/" + config.getBucket() + "/" + entry.getKey();
+		URL url = new URL(base(config.getEndpoint()) + path);
 		HttpURLConnection connection = open(url);
 		try {
+			signRequest(connection, "GET", path, "", new Date());
 			requireSuccess(connection, "download");
 			long size = 0;
 			try (InputStream in = connection.getInputStream(); FileOutputStream out = new FileOutputStream(target)) {
@@ -171,7 +178,7 @@ public final class QiniuRestoreClient {
 			if (entry.getSize() >= 0 && size != entry.getSize()) {
 				throw new IOException("Downloaded backup size does not match cloud listing; refresh and retry");
 			}
-			LogUtils.diagnostic(context, "Qiniu download complete: bytes=" + size, null);
+			LogUtils.diagnostic(context, "S3 download complete: bytes=" + size, null);
 		} finally {
 			connection.disconnect();
 		}
@@ -226,27 +233,91 @@ public final class QiniuRestoreClient {
 
 	private void requireSuccess(HttpURLConnection connection, String operation) throws IOException {
 		int status = connection.getResponseCode();
-		LogUtils.diagnostic(context, "Qiniu " + operation + " response: HTTP " + status
-				+ ", requestId=" + connection.getHeaderField("X-Reqid"), null);
+		LogUtils.diagnostic(context, "S3 " + operation + " response: HTTP " + status, null);
 		if (status != HttpURLConnection.HTTP_OK) {
 			try (InputStream in = connection.getErrorStream()) {
 				if (in != null) {
-					LogUtils.diagnostic(context, "Qiniu " + operation + " error: " + readText(in, 8192), null);
+					LogUtils.diagnostic(context, "S3 " + operation + " error: " + readText(in, 8192), null);
 				}
 			}
-			throw new IOException("Qiniu " + operation + " failed (HTTP " + status + ")");
+			throw new IOException("S3 " + operation + " failed (HTTP " + status + ")");
 		}
 	}
 
-	private String sign(String value) throws IOException {
+	private void signRequest(HttpURLConnection connection, String method, String path, String payloadHash, Date date) throws IOException {
 		try {
-			Mac mac = Mac.getInstance("HmacSHA1");
-			mac.init(new SecretKeySpec(config.getSecretKey().getBytes("UTF-8"), "HmacSHA1"));
-			return config.getAccessKey() + ":" + Base64.encodeToString(mac.doFinal(value.getBytes("UTF-8")),
-					Base64.URL_SAFE | Base64.NO_WRAP);
-		} catch (GeneralSecurityException e) {
-			throw new IOException("Cannot sign Qiniu request", e);
+			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US);
+			dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+			String amzDate = dateFormat.format(date);
+			String dateStamp = amzDate.substring(0, 8);
+
+			if (payloadHash.isEmpty()) {
+				payloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"; // empty SHA256
+			}
+
+			String canonicalUri = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
+			String canonicalQueryString = path.contains("?") ? path.substring(path.indexOf('?') + 1) : "";
+			String canonicalHeaders = "host:" + connection.getURL().getHost() + "\nx-amz-content-sha256:" + payloadHash + "\nx-amz-date:" + amzDate + "\n";
+			String signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+			String canonicalRequest = method + "\n" + canonicalUri + "\n" + canonicalQueryString + "\n" + canonicalHeaders + "\n" + signedHeaders + "\n" + payloadHash;
+
+			String algorithm = "AWS4-HMAC-SHA256";
+			String credentialScope = dateStamp + "/" + config.getRegion() + "/s3/aws4_request";
+			String stringToSign = algorithm + "\n" + amzDate + "\n" + credentialScope + "\n" + sha256Hex(canonicalRequest);
+
+			byte[] signingKey = getSignatureKey(config.getSecretKey(), dateStamp, config.getRegion(), "s3");
+			String signature = hmacSha256Hex(stringToSign, signingKey);
+
+			String authorizationHeader = algorithm + " Credential=" + config.getAccessKey() + "/" + credentialScope + ", SignedHeaders=" + signedHeaders + ", Signature=" + signature;
+
+			connection.setRequestProperty("x-amz-date", amzDate);
+			connection.setRequestProperty("x-amz-content-sha256", payloadHash);
+			connection.setRequestProperty("Authorization", authorizationHeader);
+		} catch (Exception e) {
+			throw new IOException("Cannot sign S3 request", e);
 		}
+	}
+
+	private byte[] getSignatureKey(String key, String dateStamp, String regionName, String serviceName) throws Exception {
+		byte[] kSecret = ("AWS4" + key).getBytes("UTF-8");
+		byte[] kDate = hmacSha256(dateStamp, kSecret);
+		byte[] kRegion = hmacSha256(regionName, kDate);
+		byte[] kService = hmacSha256(serviceName, kRegion);
+		return hmacSha256("aws4_request", kService);
+	}
+
+	private byte[] hmacSha256(String data, byte[] key) throws Exception {
+		Mac mac = Mac.getInstance("HmacSHA256");
+		mac.init(new SecretKeySpec(key, "HmacSHA256"));
+		return mac.doFinal(data.getBytes("UTF-8"));
+	}
+
+	private String hmacSha256Hex(String data, byte[] key) throws Exception {
+		return bytesToHex(hmacSha256(data, key));
+	}
+
+	private String sha256Hex(String data) throws Exception {
+		MessageDigest digest = MessageDigest.getInstance("SHA-256");
+		return bytesToHex(digest.digest(data.getBytes("UTF-8")));
+	}
+
+	private String bytesToHex(byte[] bytes) {
+		StringBuilder result = new StringBuilder();
+		for (byte b : bytes) {
+			result.append(String.format("%02x", b));
+		}
+		return result.toString();
+	}
+
+	private String extractXmlTag(String xml, String tag) {
+		String startTag = "<" + tag + ">";
+		String endTag = "</" + tag + ">";
+		int start = xml.indexOf(startTag);
+		if (start < 0) return null;
+		start += startTag.length();
+		int end = xml.indexOf(endTag, start);
+		if (end < 0) return null;
+		return xml.substring(start, end);
 	}
 
 	private static HttpURLConnection open(URL url) throws IOException {

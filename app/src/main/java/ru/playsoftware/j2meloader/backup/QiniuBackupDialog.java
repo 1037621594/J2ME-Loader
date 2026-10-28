@@ -36,9 +36,8 @@ public final class QiniuBackupDialog {
 		EditText bucket = field(context, layout, R.string.qiniu_bucket, config.getBucket(), false);
 		EditText accessKey = field(context, layout, R.string.qiniu_access_key, config.getAccessKey(), true);
 		EditText secretKey = field(context, layout, R.string.qiniu_secret_key, config.getSecretKey(), true);
-		EditText uploadUrl = field(context, layout, R.string.qiniu_upload_url, config.getUploadUrl(), false);
-		EditText downloadUrl = field(context, layout, R.string.qiniu_download_url, config.getDownloadUrl(), false);
-		EditText listUrl = field(context, layout, R.string.qiniu_list_url, config.getListUrl(), false);
+		EditText endpoint = field(context, layout, R.string.s3_endpoint, config.getEndpoint(), false);
+		EditText region = field(context, layout, R.string.s3_region, config.getRegion(), false);
 		TextView restoreHelp = new TextView(context);
 		restoreHelp.setText(R.string.qiniu_restore_help);
 		layout.addView(restoreHelp);
@@ -55,8 +54,8 @@ public final class QiniuBackupDialog {
 			try {
 				QiniuBackupConfig current = new QiniuBackupConfig(enabled.isChecked(),
 						bucket.getText().toString().trim(), accessKey.getText().toString().trim(),
-						secretKey.getText().toString().trim(), uploadUrl.getText().toString().trim(),
-						downloadUrl.getText().toString().trim(), listUrl.getText().toString().trim());
+						secretKey.getText().toString().trim(), endpoint.getText().toString().trim(),
+						region.getText().toString().trim());
 				ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
 				clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.qiniu_settings),
 						current.exportConfig()));
@@ -78,9 +77,8 @@ public final class QiniuBackupDialog {
 				bucket.setText(imported.getBucket());
 				accessKey.setText(imported.getAccessKey());
 				secretKey.setText(imported.getSecretKey());
-				uploadUrl.setText(imported.getUploadUrl());
-				downloadUrl.setText(imported.getDownloadUrl());
-				listUrl.setText(imported.getListUrl());
+				endpoint.setText(imported.getEndpoint());
+				region.setText(imported.getRegion());
 				Toast.makeText(context, R.string.qiniu_config_imported, Toast.LENGTH_LONG).show();
 			} catch (Exception e) {
 				Toast.makeText(context, R.string.qiniu_config_import_failed, Toast.LENGTH_LONG).show();
@@ -95,14 +93,10 @@ public final class QiniuBackupDialog {
 		dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
 			QiniuBackupConfig updated = new QiniuBackupConfig(enabled.isChecked(),
 					bucket.getText().toString().trim(), accessKey.getText().toString().trim(),
-					secretKey.getText().toString().trim(), uploadUrl.getText().toString().trim(),
-					downloadUrl.getText().toString().trim(), listUrl.getText().toString().trim());
+					secretKey.getText().toString().trim(), endpoint.getText().toString().trim(),
+					region.getText().toString().trim());
 			if (updated.isEnabled() && !updated.isValid()) {
 				Toast.makeText(context, R.string.qiniu_invalid_config, Toast.LENGTH_LONG).show();
-				return;
-			}
-			if (!updated.getDownloadUrl().isEmpty() && !updated.isRestoreValid()) {
-				Toast.makeText(context, R.string.qiniu_restore_config_required, Toast.LENGTH_LONG).show();
 				return;
 			}
 			updated.save(context);
